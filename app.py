@@ -314,7 +314,7 @@ elif st.session_state.page == "portfolio":
 
 
 # ==========================================
-# 頁面 3：個股行情與動態平滑走勢圖（Dashboard Screen）
+# 頁面 3：個股行情與 3D 浮現進場走勢圖（Dashboard Screen）
 # ==========================================
 elif st.session_state.page == "dashboard":
     dash_css = """
@@ -385,16 +385,36 @@ elif st.session_state.page == "dashboard":
         to { opacity: 1; }
     }
 
-    /* 折線圖左至右流暢揭開動畫 */
-    .js-plotly-plot .main-svg:first-child {
-        animation: wipe-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    /* 圖表外層立體景深容器：徹底消除閃爍，並賦予由後向前浮現效果 */
+    .chart-3d-stage {
+        perspective: 1200px;
+        width: 100%;
+        background-color: #F7F4EA;
+        border-radius: 14px;
+        overflow: hidden;
     }
-    @keyframes wipe-in {
+
+    /* 華麗進場動畫：從後方深處 (scale 0.88, opacity 0, blur) 平滑推進到眼前 (scale 1.0) */
+    .chart-forward-anim {
+        animation: zoomForwardPop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        transform-origin: center center;
+        will-change: transform, opacity, filter;
+    }
+
+    @keyframes zoomForwardPop {
         0% {
-            clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
+            opacity: 0;
+            transform: scale(0.88) translateZ(-60px);
+            filter: blur(8px);
+        }
+        50% {
+            opacity: 0.85;
+            filter: blur(1.5px);
         }
         100% {
-            clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+            opacity: 1;
+            transform: scale(1.0) translateZ(0);
+            filter: blur(0px);
         }
     }
     </style>
@@ -432,7 +452,6 @@ elif st.session_state.page == "dashboard":
     current_ticker = st.session_state.active_ticker
     market_type = detect_market(current_ticker)
 
-    # 質感載入動畫替代預設 spinner
     loader_placeholder = st.empty()
     loader_placeholder.markdown(f"""
         <div class="premium-loader">
@@ -443,7 +462,6 @@ elif st.session_state.page == "dashboard":
 
     try:
         stock = yf.Ticker(current_ticker)
-        # 一次抓取最完整的長期數據（上市以來），讓縮小手勢隨意回溯更早的時間
         full_df = stock.history(period="max")
         info = stock.info
         loader_placeholder.empty()
@@ -491,7 +509,6 @@ elif st.session_state.page == "dashboard":
                 with c_tools:
                     show_indicators = st.multiselect("疊加技術指標", ["20 日均線 (MA20)", "60 日季線 (MA60)", "RSI 強弱指標"], default=["20 日均線 (MA20)"])
 
-                # 計算指標
                 plot_data = full_df.copy()
                 if "20 日均線 (MA20)" in show_indicators and len(plot_data) >= 20:
                     plot_data["MA20"] = plot_data["Close"].rolling(window=20).mean()
@@ -500,7 +517,6 @@ elif st.session_state.page == "dashboard":
                 if "RSI 強弱指標" in show_indicators and len(plot_data) >= 14:
                     plot_data["RSI"] = compute_rsi(plot_data["Close"])
 
-                # 依選定預設視野切換初始 X 軸視窗，其餘歷史數據仍保留在圖表中供放大/縮小查看
                 latest_date = plot_data.index.max()
                 delta_map = {
                     "最近 1 個月": timedelta(days=30),
@@ -522,7 +538,6 @@ elif st.session_state.page == "dashboard":
                     row_heights=[0.75, 0.25] if has_rsi else [1.0]
                 )
 
-                # 主線圖（由左至右平滑載入）
                 fig.add_trace(go.Scatter(
                     x=plot_data.index, y=plot_data["Close"], mode='lines', name='收盤價',
                     line=dict(color=theme_color, width=2.5),
@@ -540,37 +555,48 @@ elif st.session_state.page == "dashboard":
                     fig.add_hline(y=70, line_dash="dash", line_color="#C0392B", row=2, col=1)
                     fig.add_hline(y=30, line_dash="dash", line_color="#27AE60", row=2, col=1)
 
-                # 開啟 iPad 縮小隨意看更大時間範圍（雙指縮放 + rangeslider）
                 fig.update_layout(
                     paper_bgcolor="#F7F4EA",
                     plot_bgcolor="#F7F4EA",
                     margin=dict(l=10, r=10, t=15, b=10),
                     height=510,
                     hovermode="x unified",
-                    dragmode="zoom", # 預設縮放互動
+                    dragmode="pan",
                     xaxis=dict(
                         showgrid=True,
                         gridcolor="#E3DEC8",
                         color="#2F3E34",
-                        range=[init_start, latest_date], # 預設顯示選定區間，其餘可往外捏合展開
-                        rangeslider=dict(visible=True, thickness=0.06, bgcolor="#EFEADB"), # 下方提供直覺時間滑動軸
+                        range=[init_start, latest_date],
+                        rangeslider=dict(
+                            visible=True,
+                            thickness=0.07,
+                            bgcolor="#EFEADB"
+                        ),
                         type="date"
                     ),
-                    yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor="#E3DEC8",
+                        color="#2F3E34",
+                        autorange=True,
+                        fixedrange=False
+                    )
                 )
 
-                # 注入繪圖動態過渡參數
-                fig.layout.updatemenus = []
+                # 套用 3D 景深前推外層容器
+                st.markdown('<div class="chart-3d-stage"><div class="chart-forward-anim">', unsafe_allow_html=True)
                 st.plotly_chart(
                     fig,
                     use_container_width=True,
                     config={
-                        'scrollZoom': True,           # 支援滾輪 / 捏合手勢縮放
-                        'displayModeBar': True,       # 顯示上方縮放、還原工具列
-                        'modeBarButtonsToRemove': ['lasso2d', 'select2d']
+                        'scrollZoom': True,
+                        'displayModeBar': False,
+                        'showTips': False
                     }
                 )
-                st.caption("💡 提示：在 iPad 上可以用 **雙指捏合縮小** 來看更早的歷史走勢，或滑動圖表最下方的時間條。")
+                st.markdown('</div></div>', unsafe_allow_html=True)
+
+                st.caption("💡 提示：在 iPad 上可用 **雙指捏合縮小** 展開歷史時間，單指左右滑動移動時間軸，或直接拖曳底部的時間滑桿。")
 
             with tab_data:
                 st.caption("最近 30 個交易日資料明細")
