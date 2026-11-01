@@ -4,6 +4,7 @@ import pandas as pd
 import base64
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # 1. 基礎頁面配置
 st.set_page_config(
@@ -20,7 +21,6 @@ if "page" not in st.session_state:
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = "2330.TW"
 
-# 自訂市場顏色規則庫（預設內建市場規則）
 if "market_rules" not in st.session_state:
     st.session_state.market_rules = {
         "台股": "漲紅跌綠",
@@ -28,7 +28,6 @@ if "market_rules" not in st.session_state:
         "日股": "漲綠跌紅"
     }
 
-# 預設個人持股清單
 if "my_portfolio" not in st.session_state:
     st.session_state.my_portfolio = [
         {"symbol": "2330.TW", "market": "台股", "shares": 1000, "cost": 950.0},
@@ -36,7 +35,6 @@ if "my_portfolio" not in st.session_state:
         {"symbol": "7203.T", "market": "日股", "shares": 100, "cost": 2800.0}
     ]
 
-# 輔助函式：自動判斷預設市場
 def detect_market(symbol: str) -> str:
     sym = symbol.upper().strip()
     if sym.endswith(".TW") or sym.endswith(".TWO"):
@@ -46,13 +44,19 @@ def detect_market(symbol: str) -> str:
     else:
         return "美股"
 
-# 輔助函式：依市場規則取得漲跌顏色
 def get_market_color(market_name: str, is_up: bool) -> str:
     rule = st.session_state.market_rules.get(market_name, "漲綠跌紅")
     if rule == "漲紅跌綠":
-        return "#E53935" if is_up else "#2E7D32"  # 紅漲綠跌
+        return "#E53935" if is_up else "#2E7D32"
     else:
-        return "#2E7D32" if is_up else "#E53935"  # 綠漲紅跌
+        return "#2E7D32" if is_up else "#E53935"
+
+def compute_rsi(data, window=14):
+    delta = data.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
 
 # ==========================================
@@ -112,10 +116,6 @@ if st.session_state.page == "welcome":
         text-decoration: none;
         background: transparent;
     }}
-    .continue-hitbox:active {{
-        background: rgba(0, 0, 0, 0.05);
-        border-radius: 8px;
-    }}
     </style>
     """
     st.markdown(welcome_css, unsafe_allow_html=True)
@@ -129,7 +129,7 @@ if st.session_state.page == "welcome":
 
 
 # ==========================================
-# 頁面 2：全球多元持股庫（支援自訂任意國家）
+# 頁面 2：持股庫與總資產（Portfolio Screen）
 # ==========================================
 elif st.session_state.page == "portfolio":
     theme_css = """
@@ -141,7 +141,7 @@ elif st.session_state.page == "portfolio":
     }
     .block-container {
         padding: 2rem 2.5rem !important;
-        max-width: 1200px !important;
+        max-width: 1250px !important;
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -171,7 +171,6 @@ elif st.session_state.page == "portfolio":
     """
     st.markdown(theme_css, unsafe_allow_html=True)
 
-    # 頂部操作按鈕
     nav_col1, _, nav_col3 = st.columns([1.5, 4, 2.5])
     with nav_col1:
         if st.button("← 返回封面"):
@@ -179,41 +178,36 @@ elif st.session_state.page == "portfolio":
             st.query_params["page"] = "welcome"
             st.rerun()
     with nav_col3:
-        if st.button("🚀 前往行情查詢與分析", use_container_width=True):
+        if st.button("🚀 前往個股深度分析", use_container_width=True):
             st.session_state.page = "dashboard"
             st.query_params["page"] = "dashboard"
             st.rerun()
 
     st.markdown("## 💼 全球投資持股庫")
-    st.caption("支援自訂多國股票與漲跌配色習慣，點擊「📊 分析」無縫切換走勢。")
+    st.caption("支援多國股票分類、即時多維度損益與配置佔比。")
 
-    # 1. 新增股票面板（含自訂市場國別）
     with st.expander("➕ 新增股票到持股庫", expanded=False):
         c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
-        
         with c_sym:
-            new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 005930.KS)", key="input_add_sym").strip().upper()
-        
+            new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 7203.T)", key="input_add_sym").strip().upper()
         with c_mkt_select:
             known_markets = list(st.session_state.market_rules.keys())
             auto_idx = known_markets.index(detect_market(new_sym)) if detect_market(new_sym) in known_markets else 0
             market_options = known_markets + ["➕ 自訂其他國家/市場..."]
             chosen_market = st.selectbox("市場國別", market_options, index=auto_idx)
-            
         with c_shares:
             new_shares = st.number_input("持有股數", min_value=1.0, value=100.0, step=1.0)
         with c_cost:
             new_cost = st.number_input("買入平均成本", min_value=0.01, value=100.0, step=1.0)
 
-        # 若使用者勾選了自訂國家
         final_market = chosen_market
         if chosen_market == "➕ 自訂其他國家/市場...":
             c_custom1, c_custom2 = st.columns(2)
             with c_custom1:
-                custom_name = st.text_input("輸入國家 / 市場名稱 (例如：韓股、英股、港股)", value="其他市場").strip()
+                custom_name = st.text_input("輸入市場名稱 (例如：韓股、英股)", value="其他市場").strip()
                 final_market = custom_name
             with c_custom2:
-                custom_color_rule = st.radio("該市場漲跌顏色偏好：", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
+                custom_color_rule = st.radio("漲跌顏色偏好：", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
                 st.session_state.market_rules[custom_name] = custom_color_rule
 
         st.write("")
@@ -230,7 +224,6 @@ elif st.session_state.page == "portfolio":
 
     st.write("")
 
-    # 2. 自動收集所有持股庫出現過的國家分類
     all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
     tab_list = ["🌐 全部持股"] + [f"📍 {m}" for m in all_markets]
     tabs = st.tabs(tab_list)
@@ -248,13 +241,14 @@ elif st.session_state.page == "portfolio":
             else:
                 total_market_val = 0.0
                 total_cost_val = 0.0
+                today_total_change = 0.0
 
-                h1, h2, h3, h4, h5, h6 = st.columns([2, 1.2, 1.5, 1.5, 2, 2])
+                h1, h2, h3, h4, h5, h6 = st.columns([2, 1.2, 1.3, 1.3, 2, 2.2])
                 h1.markdown("**代號 (市場)**")
                 h2.markdown("**持有股數**")
                 h3.markdown("**買入成本**")
                 h4.markdown("**即時現價**")
-                h5.markdown("**未實現損益**")
+                h5.markdown("**未實現累積損益**")
                 h6.markdown("**操作**")
                 st.divider()
 
@@ -266,23 +260,29 @@ elif st.session_state.page == "portfolio":
 
                     try:
                         t = yf.Ticker(sym)
-                        hist = t.history(period="1d")
-                        curr_price = hist["Close"].iloc[-1] if not hist.empty else cost
+                        hist = t.history(period="2d")
+                        if not hist.empty:
+                            curr_price = hist["Close"].iloc[-1]
+                            prev_close = hist["Close"].iloc[-2] if len(hist) > 1 else curr_price
+                        else:
+                            curr_price, prev_close = cost, cost
                     except Exception:
-                        curr_price = cost
+                        curr_price, prev_close = cost, cost
 
                     cost_sub = shares * cost
                     mkt_sub = shares * curr_price
                     diff = mkt_sub - cost_sub
                     diff_pct = (diff / cost_sub) * 100 if cost_sub > 0 else 0
 
+                    day_diff_sub = (curr_price - prev_close) * shares
+                    today_total_change += day_diff_sub
+
                     total_market_val += mkt_sub
                     total_cost_val += cost_sub
 
-                    # 取得該市場的專屬顏色
                     profit_color = get_market_color(mkt, is_up=(diff >= 0))
 
-                    r1, r2, r3, r4, r5, r6 = st.columns([2, 1.2, 1.5, 1.5, 2, 2])
+                    r1, r2, r3, r4, r5, r6 = st.columns([2, 1.2, 1.3, 1.3, 2, 2.2])
                     r1.write(f"**{sym}** ({mkt})")
                     r2.write(f"{shares:,.0f}")
                     r3.write(f"{cost:,.2f}")
@@ -292,7 +292,7 @@ elif st.session_state.page == "portfolio":
                     with r6:
                         b_col1, b_col2 = st.columns([2, 1])
                         with b_col1:
-                            if st.button("📊 分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
+                            if st.button("📊 深度分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
                                 st.session_state.active_ticker = sym
                                 st.session_state.page = "dashboard"
                                 st.query_params["page"] = "dashboard"
@@ -306,14 +306,15 @@ elif st.session_state.page == "portfolio":
                 tot_diff = total_market_val - total_cost_val
                 tot_pct = (tot_diff / total_cost_val) * 100 if total_cost_val > 0 else 0
                 
-                m1, m2, m3 = st.columns(3)
+                m1, m2, m3, m4 = st.columns(4)
                 m1.metric("持股總現值", f"{total_market_val:,.2f}")
                 m2.metric("投入總成本", f"{total_cost_val:,.2f}")
-                m3.metric("總損益額", f"{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
+                m3.metric("累積未實現損益", f"{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
+                m4.metric("今日單日總波動", f"{today_total_change:+,.2f}")
 
 
 # ==========================================
-# 頁面 3：深入行情與技術分析（自由時間區間折線圖）
+# 頁面 3：個股行情與動態平滑走勢圖（Dashboard Screen）
 # ==========================================
 elif st.session_state.page == "dashboard":
     dash_css = """
@@ -325,7 +326,7 @@ elif st.session_state.page == "dashboard":
     }
     .block-container {
         padding: 2rem 2.5rem !important;
-        max-width: 1200px !important;
+        max-width: 1250px !important;
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -334,7 +335,7 @@ elif st.session_state.page == "dashboard":
         background-color: #EFEADB !important;
         border: 1px solid #D8D2C0 !important;
         border-radius: 12px !important;
-        padding: 12px 18px !important;
+        padding: 10px 14px !important;
     }
     div[data-testid="stButton"] > button {
         background-color: #E6E0CE !important;
@@ -350,6 +351,51 @@ elif st.session_state.page == "dashboard":
     div[data-baseweb="input"], div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
+    }
+
+    /* 科技感載入動畫：微光呼吸波紋效果 */
+    .premium-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2.5rem 1rem;
+        gap: 14px;
+    }
+    .pulse-ring {
+        width: 48px;
+        height: 48px;
+        border: 3.5px solid rgba(115, 138, 122, 0.25);
+        border-top-color: #2F3E34;
+        border-radius: 50%;
+        animation: spin 0.85s linear infinite;
+    }
+    .pulse-text {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        color: #556B5D;
+        animation: text-pulse 1.4s ease-in-out infinite alternate;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    @keyframes text-pulse {
+        from { opacity: 0.45; }
+        to { opacity: 1; }
+    }
+
+    /* 折線圖左至右流暢揭開動畫 */
+    .js-plotly-plot .main-svg:first-child {
+        animation: wipe-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    }
+    @keyframes wipe-in {
+        0% {
+            clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
+        }
+        100% {
+            clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+        }
     }
     </style>
     """
@@ -367,13 +413,12 @@ elif st.session_state.page == "dashboard":
             st.query_params["page"] = "welcome"
             st.rerun()
 
-    st.markdown("### 📊 股票行情與技術分析")
+    st.markdown("### 📊 股票全方位數據指標與技術分析")
 
-    # 代號搜尋與分析按鍵
     col_input, col_btn = st.columns([4, 1])
     with col_input:
         target_symbol = st.text_input(
-            "輸入股票代號（例如 2330.TW、AAPL、7203.T、005930.KS）：",
+            "輸入股票代號（例如 2330.TW、AAPL、7203.T）：",
             value=st.session_state.active_ticker,
             key="ticker_input_field"
         )
@@ -387,121 +432,176 @@ elif st.session_state.page == "dashboard":
     current_ticker = st.session_state.active_ticker
     market_type = detect_market(current_ticker)
 
-    with st.spinner(f"正在分析 {current_ticker} ({market_type}) 數據..."):
-        try:
-            stock = yf.Ticker(current_ticker)
-            df_snapshot = stock.history(period="5d")
-            info = stock.info
+    # 質感載入動畫替代預設 spinner
+    loader_placeholder = st.empty()
+    loader_placeholder.markdown(f"""
+        <div class="premium-loader">
+            <div class="pulse-ring"></div>
+            <div class="pulse-text">即時抓取 {current_ticker} ({market_type}) 數據與繪製走勢...</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-            if not df_snapshot.empty:
-                latest_close = df_snapshot["Close"].iloc[-1]
-                prev_close = df_snapshot["Close"].iloc[-2] if len(df_snapshot) > 1 else latest_close
-                diff = latest_close - prev_close
-                diff_pct = (diff / prev_close) * 100
-                is_up = (diff >= 0)
+    try:
+        stock = yf.Ticker(current_ticker)
+        # 一次抓取最完整的長期數據（上市以來），讓縮小手勢隨意回溯更早的時間
+        full_df = stock.history(period="max")
+        info = stock.info
+        loader_placeholder.empty()
 
-                # 依市場規則自動取得漲跌線條色彩
-                theme_color = get_market_color(market_type, is_up)
+        if not full_df.empty:
+            latest_close = full_df["Close"].iloc[-1]
+            prev_close = full_df["Close"].iloc[-2] if len(full_df) > 1 else latest_close
+            diff = latest_close - prev_close
+            diff_pct = (diff / prev_close) * 100
+            is_up = (diff >= 0)
+            theme_color = get_market_color(market_type, is_up)
 
-                company_name = info.get("shortName", current_ticker)
-                st.markdown(f"## {company_name} ({current_ticker}) · <span style='font-size:1.1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
+            company_name = info.get("shortName", current_ticker)
+            st.markdown(f"## {company_name} ({current_ticker}) · <span style='font-size:1.1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
 
-                # 4 格數據指標卡片
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("最新收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
-                m2.metric("今日最高", f"{df_snapshot['High'].iloc[-1]:.2f}")
-                m3.metric("今日最低", f"{df_snapshot['Low'].iloc[-1]:.2f}")
-                m4.metric("最新成交量", f"{int(df_snapshot['Volume'].iloc[-1]):,}")
+            # 8 大重點指標
+            r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+            r1_c1.metric("最新收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
+            r1_c2.metric("今日最高 / 最低", f"{full_df['High'].iloc[-1]:.2f} / {full_df['Low'].iloc[-1]:.2f}")
+            r1_c3.metric("52 週最高", f"{info.get('fiftyTwoWeekHigh', full_df['High'].tail(252).max()):.2f}")
+            r1_c4.metric("52 週最低", f"{info.get('fiftyTwoWeekLow', full_df['Low'].tail(252).min()):.2f}")
 
-                st.markdown("---")
+            r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+            pe_val = info.get('trailingPE', None)
+            r2_c1.metric("本益比 (PE)", f"{pe_val:.2f}" if pe_val else "N/A")
+            eps_val = info.get('trailingEps', None)
+            r2_c2.metric("每股盈餘 (EPS)", f"{eps_val:.2f}" if eps_val else "N/A")
+            div_yield = info.get('dividendYield', None)
+            r2_c3.metric("現金殖利率", f"{div_yield * 100:.2f}%" if div_yield else "0.00%")
+            beta_val = info.get('beta', None)
+            r2_c4.metric("波動度 (Beta)", f"{beta_val:.2f}" if beta_val else "N/A")
 
-                tab_chart, tab_data, tab_info = st.tabs(["📈 動態走勢圖", "📋 歷史明細", "🏢 公司概況"])
+            st.markdown("---")
 
-                with tab_chart:
-                    # 自由輸入 / 選擇時間區間
-                    st.write("**選擇走勢圖時間區間：**")
-                    time_mode = st.radio("區間模式", ["快速選擇常用時間", "自訂任意起訖日期"], horizontal=True, label_visibility="collapsed")
-                    
-                    chart_df = pd.DataFrame()
+            tab_chart, tab_data, tab_info = st.tabs(["📈 動態走勢與技術線", "📋 歷史明細", "🏢 公司財務與基本面"])
 
-                    if time_mode == "快速選擇常用時間":
-                        period_opts = {
-                            "1 天 (1d)": "1d",
-                            "1 個月 (1mo)": "1mo",
-                            "2 個月 (2mo)": "2mo",
-                            "3 個月 (3mo)": "3mo",
-                            "4 年 (4y)": "4y",
-                            "上市以來全部 (Max)": "max"
-                        }
-                        selected_label = st.selectbox("選擇區間", list(period_opts.keys()), index=3)
-                        p_val = period_opts[selected_label]
-                        interval_val = "5m" if p_val == "1d" else "1d"
-                        chart_df = stock.history(period=p_val, interval=interval_val)
+            with tab_chart:
+                c_mode, c_tools = st.columns([3, 2])
+                with c_mode:
+                    preset_view = st.selectbox(
+                        "預設聚焦區間（可直接在圖上縮放以看更多時間）：",
+                        ["最近 1 個月", "最近 3 個月", "最近 6 個月", "最近 1 年", "最近 4 年", "上市以來全部"],
+                        index=1
+                    )
+                with c_tools:
+                    show_indicators = st.multiselect("疊加技術指標", ["20 日均線 (MA20)", "60 日季線 (MA60)", "RSI 強弱指標"], default=["20 日均線 (MA20)"])
 
-                    else:
-                        c_start, c_end = st.columns(2)
-                        with c_start:
-                            start_date = st.date_input("開始日期", datetime.now() - timedelta(days=60))
-                        with c_end:
-                            end_date = st.date_input("結束日期", datetime.now())
+                # 計算指標
+                plot_data = full_df.copy()
+                if "20 日均線 (MA20)" in show_indicators and len(plot_data) >= 20:
+                    plot_data["MA20"] = plot_data["Close"].rolling(window=20).mean()
+                if "60 日季線 (MA60)" in show_indicators and len(plot_data) >= 60:
+                    plot_data["MA60"] = plot_data["Close"].rolling(window=60).mean()
+                if "RSI 強弱指標" in show_indicators and len(plot_data) >= 14:
+                    plot_data["RSI"] = compute_rsi(plot_data["Close"])
 
-                        if start_date < end_date:
-                            chart_df = stock.history(start=start_date.strftime("%Y-%m-%d"), end=(end_date + timedelta(days=1)).strftime("%Y-%m-%d"))
-                        else:
-                            st.error("開始日期必須早於結束日期！")
+                # 依選定預設視野切換初始 X 軸視窗，其餘歷史數據仍保留在圖表中供放大/縮小查看
+                latest_date = plot_data.index.max()
+                delta_map = {
+                    "最近 1 個月": timedelta(days=30),
+                    "最近 3 個月": timedelta(days=90),
+                    "最近 6 個月": timedelta(days=180),
+                    "最近 1 年": timedelta(days=365),
+                    "最近 4 年": timedelta(days=365 * 4),
+                    "上市以來全部": None
+                }
+                init_delta = delta_map[preset_view]
+                init_start = (latest_date - init_delta) if init_delta else plot_data.index.min()
 
-                    # 繪製 Plotly 折線走勢圖
-                    if not chart_df.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=chart_df.index,
-                            y=chart_df["Close"],
-                            mode='lines',
-                            name='收盤價',
-                            line=dict(color=theme_color, width=2.5),
-                            fill='tozeroy',
-                            fillcolor=f"rgba({int(theme_color[1:3], 16)}, {int(theme_color[3:5], 16)}, {int(theme_color[5:7], 16)}, 0.08)"
-                        ))
+                has_rsi = "RSI 強弱指標" in show_indicators and "RSI" in plot_data
+                rows = 2 if has_rsi else 1
+                fig = make_subplots(
+                    rows=rows, cols=1,
+                    shared_xaxes=True,
+                    vertical_spacing=0.08,
+                    row_heights=[0.75, 0.25] if has_rsi else [1.0]
+                )
 
-                        fig.update_layout(
-                            paper_bgcolor="#F7F4EA",
-                            plot_bgcolor="#F7F4EA",
-                            margin=dict(l=10, r=10, t=20, b=10),
-                            height=430,
-                            hovermode="x unified",
-                            xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
-                            yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("此時間區間內查無交易數據。")
+                # 主線圖（由左至右平滑載入）
+                fig.add_trace(go.Scatter(
+                    x=plot_data.index, y=plot_data["Close"], mode='lines', name='收盤價',
+                    line=dict(color=theme_color, width=2.5),
+                    fill='tozeroy',
+                    fillcolor=f"rgba({int(theme_color[1:3], 16)}, {int(theme_color[3:5], 16)}, {int(theme_color[5:7], 16)}, 0.08)"
+                ), row=1, col=1)
 
-                with tab_data:
-                    st.caption("最近 30 個交易日資料明細")
-                    df_all = stock.history(period="2mo")
-                    display_df = df_all[["Open", "High", "Low", "Close", "Volume"]].tail(30).sort_index(ascending=False)
-                    st.dataframe(display_df, use_container_width=True)
+                if "MA20" in plot_data:
+                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA20"], mode='lines', name='MA20 (月線)', line=dict(color='#E67E22', width=1.5)), row=1, col=1)
+                if "MA60" in plot_data:
+                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA60"], mode='lines', name='MA60 (季線)', line=dict(color='#8E44AD', width=1.5)), row=1, col=1)
 
-                with tab_info:
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**所屬市場：** {market_type}")
-                        st.write(f"**產業類別：** {info.get('sector', '無資料')}")
-                        st.write(f"**細分行業：** {info.get('industry', '無資料')}")
-                        st.write(f"**計價貨幣：** {info.get('currency', '無資料')}")
-                    with c2:
-                        market_cap = info.get("marketCap", None)
-                        if market_cap:
-                            st.write(f"**總市值：** {market_cap:,}")
-                        pe_ratio = info.get("trailingPE", None)
-                        if pe_ratio:
-                            st.write(f"**本益比 (PE)：** {pe_ratio:.2f}")
+                if has_rsi:
+                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["RSI"], mode='lines', name='RSI(14)', line=dict(color='#2980B9', width=1.8)), row=2, col=1)
+                    fig.add_hline(y=70, line_dash="dash", line_color="#C0392B", row=2, col=1)
+                    fig.add_hline(y=30, line_dash="dash", line_color="#27AE60", row=2, col=1)
 
-                    st.markdown("#### 業務概況")
-                    st.write(info.get("longBusinessSummary", "暫無簡介資料。"))
+                # 開啟 iPad 縮小隨意看更大時間範圍（雙指縮放 + rangeslider）
+                fig.update_layout(
+                    paper_bgcolor="#F7F4EA",
+                    plot_bgcolor="#F7F4EA",
+                    margin=dict(l=10, r=10, t=15, b=10),
+                    height=510,
+                    hovermode="x unified",
+                    dragmode="zoom", # 預設縮放互動
+                    xaxis=dict(
+                        showgrid=True,
+                        gridcolor="#E3DEC8",
+                        color="#2F3E34",
+                        range=[init_start, latest_date], # 預設顯示選定區間，其餘可往外捏合展開
+                        rangeslider=dict(visible=True, thickness=0.06, bgcolor="#EFEADB"), # 下方提供直覺時間滑動軸
+                        type="date"
+                    ),
+                    yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
+                )
 
-            else:
-                st.error(f"查無「{current_ticker}」的行情資料，請確認股票代號是否正確。")
+                # 注入繪圖動態過渡參數
+                fig.layout.updatemenus = []
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    config={
+                        'scrollZoom': True,           # 支援滾輪 / 捏合手勢縮放
+                        'displayModeBar': True,       # 顯示上方縮放、還原工具列
+                        'modeBarButtonsToRemove': ['lasso2d', 'select2d']
+                    }
+                )
+                st.caption("💡 提示：在 iPad 上可以用 **雙指捏合縮小** 來看更早的歷史走勢，或滑動圖表最下方的時間條。")
 
-        except Exception as e:
-            st.error(f"讀取失敗：{e}")
+            with tab_data:
+                st.caption("最近 30 個交易日資料明細")
+                display_df = full_df[["Open", "High", "Low", "Close", "Volume"]].tail(30).sort_index(ascending=False)
+                st.dataframe(display_df, use_container_width=True)
+
+            with tab_info:
+                st.markdown("#### 🏢 公司核心財務與基本面數據")
+                f1, f2, f3 = st.columns(3)
+                with f1:
+                    st.write(f"**所屬市場：** {market_type}")
+                    st.write(f"**產業類別：** {info.get('sector', '無資料')}")
+                    st.write(f"**細分行業：** {info.get('industry', '無資料')}")
+                    st.write(f"**計價貨幣：** {info.get('currency', '無資料')}")
+                with f2:
+                    market_cap = info.get("marketCap", None)
+                    st.write(f"**總市值：** {market_cap:,}" if market_cap else "**總市值：** 無資料")
+                    st.write(f"**股價淨值比 (PB)：** {info.get('priceToBook', 'N/A')}")
+                    st.write(f"**在外流通股數：** {info.get('sharesOutstanding', 'N/A'):,}" if info.get('sharesOutstanding') else "**在外流通股數：** N/A")
+                with f3:
+                    st.write(f"**營業利益率：** {info.get('operatingMargins', 0)*100:.2f}%" if info.get('operatingMargins') else "**營業利益率：** N/A")
+                    st.write(f"**毛利率：** {info.get('grossMargins', 0)*100:.2f}%" if info.get('grossMargins') else "**毛利率：** N/A")
+                    st.write(f"**目標中位價：** {info.get('targetMedianPrice', 'N/A')}")
+
+                st.markdown("#### 業務概況")
+                st.write(info.get("longBusinessSummary", "暫無簡介資料。"))
+
+        else:
+            loader_placeholder.empty()
+            st.error(f"查無「{current_ticker}」的行情資料，請確認股票代號是否正確。")
+
+    except Exception as e:
+        loader_placeholder.empty()
+        st.error(f"讀取失敗：{e}")
