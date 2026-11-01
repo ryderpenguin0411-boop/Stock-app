@@ -2,9 +2,10 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import base64
+from datetime import datetime, timedelta
 import plotly.graph_objects as go
 
-# 1. 頁面基礎設置
+# 1. 基礎頁面配置
 st.set_page_config(
     page_title="Stock + Analyze",
     page_icon="📈",
@@ -19,7 +20,15 @@ if "page" not in st.session_state:
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = "2330.TW"
 
-# 預設個人持股清單 (包含市場國別)
+# 自訂市場顏色規則庫（預設內建市場規則）
+if "market_rules" not in st.session_state:
+    st.session_state.market_rules = {
+        "台股": "漲紅跌綠",
+        "美股": "漲綠跌紅",
+        "日股": "漲綠跌紅"
+    }
+
+# 預設個人持股清單
 if "my_portfolio" not in st.session_state:
     st.session_state.my_portfolio = [
         {"symbol": "2330.TW", "market": "台股", "shares": 1000, "cost": 950.0},
@@ -27,7 +36,7 @@ if "my_portfolio" not in st.session_state:
         {"symbol": "7203.T", "market": "日股", "shares": 100, "cost": 2800.0}
     ]
 
-# 輔助函式：判斷股票所屬國家市場
+# 輔助函式：自動判斷預設市場
 def detect_market(symbol: str) -> str:
     sym = symbol.upper().strip()
     if sym.endswith(".TW") or sym.endswith(".TWO"):
@@ -37,19 +46,13 @@ def detect_market(symbol: str) -> str:
     else:
         return "美股"
 
-# 輔助函式：依國家市場與漲跌回傳線圖顏色
-def get_chart_color(market: str, is_up: bool) -> str:
-    if market == "台股":
-        # 台股：漲紅、跌綠
-        return "#E53935" if is_up else "#2E7D32"
-    elif market == "美股":
-        # 美股：漲綠、跌紅
-        return "#2E7D32" if is_up else "#E53935"
-    elif market == "日股":
-        # 日股：依國際慣例，漲綠、跌紅
-        return "#00A86B" if is_up else "#D32F2F"
+# 輔助函式：依市場規則取得漲跌顏色
+def get_market_color(market_name: str, is_up: bool) -> str:
+    rule = st.session_state.market_rules.get(market_name, "漲綠跌紅")
+    if rule == "漲紅跌綠":
+        return "#E53935" if is_up else "#2E7D32"  # 紅漲綠跌
     else:
-        return "#2E7D32" if is_up else "#E53935"
+        return "#2E7D32" if is_up else "#E53935"  # 綠漲紅跌
 
 
 # ==========================================
@@ -126,7 +129,7 @@ if st.session_state.page == "welcome":
 
 
 # ==========================================
-# 頁面 2：多國持股庫與投資總覽（Portfolio Screen）
+# 頁面 2：全球多元持股庫（支援自訂任意國家）
 # ==========================================
 elif st.session_state.page == "portfolio":
     theme_css = """
@@ -168,71 +171,80 @@ elif st.session_state.page == "portfolio":
     """
     st.markdown(theme_css, unsafe_allow_html=True)
 
-    # 頂部導覽與分析觸發按鍵
-    nav_col1, nav_col2, nav_col3 = st.columns([1.5, 3.5, 2])
+    # 頂部操作按鈕
+    nav_col1, _, nav_col3 = st.columns([1.5, 4, 2.5])
     with nav_col1:
         if st.button("← 返回封面"):
             st.session_state.page = "welcome"
             st.query_params["page"] = "welcome"
             st.rerun()
     with nav_col3:
-        # 新增全局分析按鍵
         if st.button("🚀 前往行情查詢與分析", use_container_width=True):
             st.session_state.page = "dashboard"
             st.query_params["page"] = "dashboard"
             st.rerun()
 
     st.markdown("## 💼 全球投資持股庫")
-    st.caption("依國家分類管理持股，即時掌握台股、美股與日股損益。")
+    st.caption("支援自訂多國股票與漲跌配色習慣，點擊「📊 分析」無縫切換走勢。")
 
-    # 1. 新增股票面板
+    # 1. 新增股票面板（含自訂市場國別）
     with st.expander("➕ 新增股票到持股庫", expanded=False):
-        c_sym, c_mkt, c_shares, c_cost, c_add = st.columns([2, 1.5, 2, 2, 1])
+        c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
+        
         with c_sym:
-            new_sym = st.text_input("代號 (如 2330.TW / TSLA / 7203.T)", key="input_add_sym").strip().upper()
-        with c_mkt:
-            auto_market = detect_market(new_sym) if new_sym else "美股"
-            selected_market = st.selectbox("市場國別", ["台股", "美股", "日股"], index=["台股", "美股", "日股"].index(auto_market))
+            new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 005930.KS)", key="input_add_sym").strip().upper()
+        
+        with c_mkt_select:
+            known_markets = list(st.session_state.market_rules.keys())
+            auto_idx = known_markets.index(detect_market(new_sym)) if detect_market(new_sym) in known_markets else 0
+            market_options = known_markets + ["➕ 自訂其他國家/市場..."]
+            chosen_market = st.selectbox("市場國別", market_options, index=auto_idx)
+            
         with c_shares:
             new_shares = st.number_input("持有股數", min_value=1.0, value=100.0, step=1.0)
         with c_cost:
             new_cost = st.number_input("買入平均成本", min_value=0.01, value=100.0, step=1.0)
-        with c_add:
-            st.write("")
-            st.write("")
-            if st.button("儲存", use_container_width=True):
-                if new_sym:
-                    st.session_state.my_portfolio.append({
-                        "symbol": new_sym,
-                        "market": selected_market,
-                        "shares": new_shares,
-                        "cost": new_cost
-                    })
-                    st.success(f"已成功加入 [{selected_market}] {new_sym}！")
-                    st.rerun()
+
+        # 若使用者勾選了自訂國家
+        final_market = chosen_market
+        if chosen_market == "➕ 自訂其他國家/市場...":
+            c_custom1, c_custom2 = st.columns(2)
+            with c_custom1:
+                custom_name = st.text_input("輸入國家 / 市場名稱 (例如：韓股、英股、港股)", value="其他市場").strip()
+                final_market = custom_name
+            with c_custom2:
+                custom_color_rule = st.radio("該市場漲跌顏色偏好：", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
+                st.session_state.market_rules[custom_name] = custom_color_rule
+
+        st.write("")
+        if st.button("確認加入持股庫", use_container_width=True):
+            if new_sym:
+                st.session_state.my_portfolio.append({
+                    "symbol": new_sym,
+                    "market": final_market,
+                    "shares": new_shares,
+                    "cost": new_cost
+                })
+                st.success(f"已成功加入 [{final_market}] {new_sym}！")
+                st.rerun()
 
     st.write("")
 
-    # 2. 依國家分類分頁檢視
-    tab_all, tab_tw, tab_us, tab_jp = st.tabs(["🌐 全部持股", "🇹🇼 台股部位", "🇺🇸 美股部位", "🇯🇵 日股部位"])
-    
-    tab_filter_map = {
-        tab_all: None,
-        tab_tw: "台股",
-        tab_us: "美股",
-        tab_jp: "日股"
-    }
+    # 2. 自動收集所有持股庫出現過的國家分類
+    all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
+    tab_list = ["🌐 全部持股"] + [f"📍 {m}" for m in all_markets]
+    tabs = st.tabs(tab_list)
 
-    for active_tab, target_filter in tab_filter_map.items():
-        with active_tab:
-            # 篩選持股
+    for i, current_tab in enumerate(tabs):
+        with current_tab:
+            target_filter = None if i == 0 else all_markets[i - 1]
             filtered_items = [
-                (i, item) for i, item in enumerate(st.session_state.my_portfolio)
+                (idx, item) for idx, item in enumerate(st.session_state.my_portfolio)
                 if target_filter is None or item.get("market") == target_filter
             ]
 
             if not filtered_items:
-                st.info("此分類目前尚無持股部位。")
+                st.info("此分類目前尚無任何持股資料。")
             else:
                 total_market_val = 0.0
                 total_cost_val = 0.0
@@ -248,7 +260,7 @@ elif st.session_state.page == "portfolio":
 
                 for orig_idx, item in filtered_items:
                     sym = item["symbol"]
-                    mkt = item.get("market", detect_market(sym))
+                    mkt = item.get("market", "未分類")
                     shares = item["shares"]
                     cost = item["cost"]
 
@@ -267,8 +279,8 @@ elif st.session_state.page == "portfolio":
                     total_market_val += mkt_sub
                     total_cost_val += cost_sub
 
-                    # 損益顯示顏色（台股漲紅跌綠，美日股漲綠跌紅）
-                    profit_color = get_chart_color(mkt, is_up=(diff >= 0))
+                    # 取得該市場的專屬顏色
+                    profit_color = get_market_color(mkt, is_up=(diff >= 0))
 
                     r1, r2, r3, r4, r5, r6 = st.columns([2, 1.2, 1.5, 1.5, 2, 2])
                     r1.write(f"**{sym}** ({mkt})")
@@ -280,13 +292,13 @@ elif st.session_state.page == "portfolio":
                     with r6:
                         b_col1, b_col2 = st.columns([2, 1])
                         with b_col1:
-                            if st.button("📊 分析", key=f"btn_an_{target_filter}_{orig_idx}", use_container_width=True):
+                            if st.button("📊 分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
                                 st.session_state.active_ticker = sym
                                 st.session_state.page = "dashboard"
                                 st.query_params["page"] = "dashboard"
                                 st.rerun()
                         with b_col2:
-                            if st.button("🗑️", key=f"btn_del_{target_filter}_{orig_idx}"):
+                            if st.button("🗑️", key=f"btn_del_{i}_{orig_idx}"):
                                 st.session_state.my_portfolio.pop(orig_idx)
                                 st.rerun()
 
@@ -301,7 +313,7 @@ elif st.session_state.page == "portfolio":
 
 
 # ==========================================
-# 頁面 3：深入行情與技術分析（Dashboard Screen）
+# 頁面 3：深入行情與技術分析（自由時間區間折線圖）
 # ==========================================
 elif st.session_state.page == "dashboard":
     dash_css = """
@@ -335,10 +347,9 @@ elif st.session_state.page == "dashboard":
         background-color: #738A7A !important;
         color: #F7F4EA !important;
     }
-    div[data-baseweb="input"] {
+    div[data-baseweb="input"], div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
-        border: 1.5px solid #738A7A !important;
     }
     </style>
     """
@@ -358,11 +369,11 @@ elif st.session_state.page == "dashboard":
 
     st.markdown("### 📊 股票行情與技術分析")
 
-    # 代號輸入與「分析」按鍵
+    # 代號搜尋與分析按鍵
     col_input, col_btn = st.columns([4, 1])
     with col_input:
         target_symbol = st.text_input(
-            "輸入股票代號（台股如 2330.TW、美股如 AAPL、日股如 7203.T）：",
+            "輸入股票代號（例如 2330.TW、AAPL、7203.T、005930.KS）：",
             value=st.session_state.active_ticker,
             key="ticker_input_field"
         )
@@ -379,74 +390,96 @@ elif st.session_state.page == "dashboard":
     with st.spinner(f"正在分析 {current_ticker} ({market_type}) 數據..."):
         try:
             stock = yf.Ticker(current_ticker)
-            df = stock.history(period="6mo")
+            df_snapshot = stock.history(period="5d")
             info = stock.info
 
-            if not df.empty:
-                latest_close = df["Close"].iloc[-1]
-                prev_close = df["Close"].iloc[-2] if len(df) > 1 else latest_close
+            if not df_snapshot.empty:
+                latest_close = df_snapshot["Close"].iloc[-1]
+                prev_close = df_snapshot["Close"].iloc[-2] if len(df_snapshot) > 1 else latest_close
                 diff = latest_close - prev_close
                 diff_pct = (diff / prev_close) * 100
                 is_up = (diff >= 0)
 
-                # 依市場取得走勢線顏色
-                theme_color = get_chart_color(market_type, is_up)
-
-                today_high = df["High"].iloc[-1]
-                today_low = df["Low"].iloc[-1]
-                latest_vol = df["Volume"].iloc[-1]
+                # 依市場規則自動取得漲跌線條色彩
+                theme_color = get_market_color(market_type, is_up)
 
                 company_name = info.get("shortName", current_ticker)
                 st.markdown(f"## {company_name} ({current_ticker}) · <span style='font-size:1.1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
 
-                # 4 格數據卡片
+                # 4 格數據指標卡片
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("最新收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
-                m2.metric("今日最高", f"{today_high:.2f}")
-                m3.metric("今日最低", f"{today_low:.2f}")
-                m4.metric("最新成交量", f"{int(latest_vol):,}")
+                m2.metric("今日最高", f"{df_snapshot['High'].iloc[-1]:.2f}")
+                m3.metric("今日最低", f"{df_snapshot['Low'].iloc[-1]:.2f}")
+                m4.metric("最新成交量", f"{int(df_snapshot['Volume'].iloc[-1]):,}")
 
                 st.markdown("---")
 
                 tab_chart, tab_data, tab_info = st.tabs(["📈 動態走勢圖", "📋 歷史明細", "🏢 公司概況"])
 
                 with tab_chart:
-                    period_col, _ = st.columns([1, 4])
-                    with period_col:
-                        period_selected = st.selectbox(
-                            "走勢區間",
-                            ["1mo", "3mo", "6mo", "1y"],
-                            index=2
+                    # 自由輸入 / 選擇時間區間
+                    st.write("**選擇走勢圖時間區間：**")
+                    time_mode = st.radio("區間模式", ["快速選擇常用時間", "自訂任意起訖日期"], horizontal=True, label_visibility="collapsed")
+                    
+                    chart_df = pd.DataFrame()
+
+                    if time_mode == "快速選擇常用時間":
+                        period_opts = {
+                            "1 天 (1d)": "1d",
+                            "1 個月 (1mo)": "1mo",
+                            "2 個月 (2mo)": "2mo",
+                            "3 個月 (3mo)": "3mo",
+                            "4 年 (4y)": "4y",
+                            "上市以來全部 (Max)": "max"
+                        }
+                        selected_label = st.selectbox("選擇區間", list(period_opts.keys()), index=3)
+                        p_val = period_opts[selected_label]
+                        interval_val = "5m" if p_val == "1d" else "1d"
+                        chart_df = stock.history(period=p_val, interval=interval_val)
+
+                    else:
+                        c_start, c_end = st.columns(2)
+                        with c_start:
+                            start_date = st.date_input("開始日期", datetime.now() - timedelta(days=60))
+                        with c_end:
+                            end_date = st.date_input("結束日期", datetime.now())
+
+                        if start_date < end_date:
+                            chart_df = stock.history(start=start_date.strftime("%Y-%m-%d"), end=(end_date + timedelta(days=1)).strftime("%Y-%m-%d"))
+                        else:
+                            st.error("開始日期必須早於結束日期！")
+
+                    # 繪製 Plotly 折線走勢圖
+                    if not chart_df.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=chart_df.index,
+                            y=chart_df["Close"],
+                            mode='lines',
+                            name='收盤價',
+                            line=dict(color=theme_color, width=2.5),
+                            fill='tozeroy',
+                            fillcolor=f"rgba({int(theme_color[1:3], 16)}, {int(theme_color[3:5], 16)}, {int(theme_color[5:7], 16)}, 0.08)"
+                        ))
+
+                        fig.update_layout(
+                            paper_bgcolor="#F7F4EA",
+                            plot_bgcolor="#F7F4EA",
+                            margin=dict(l=10, r=10, t=20, b=10),
+                            height=430,
+                            hovermode="x unified",
+                            xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
+                            yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
                         )
-                    chart_df = stock.history(period=period_selected)
-
-                    # 建立依市場動態變色的專業 Plotly 走勢圖
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=chart_df.index,
-                        y=chart_df["Close"],
-                        mode='lines',
-                        name='收盤價',
-                        line=dict(color=theme_color, width=2.5),
-                        fill='tozeroy',
-                        fillcolor=f"rgba({int(theme_color[1:3], 16)}, {int(theme_color[3:5], 16)}, {int(theme_color[5:7], 16)}, 0.08)"
-                    ))
-
-                    # 融入米色調背景
-                    fig.update_layout(
-                        paper_bgcolor="#F7F4EA",
-                        plot_bgcolor="#F7F4EA",
-                        margin=dict(l=10, r=10, t=20, b=10),
-                        height=420,
-                        hovermode="x unified",
-                        xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
-                        yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("此時間區間內查無交易數據。")
 
                 with tab_data:
                     st.caption("最近 30 個交易日資料明細")
-                    display_df = df[["Open", "High", "Low", "Close", "Volume"]].tail(30).sort_index(ascending=False)
+                    df_all = stock.history(period="2mo")
+                    display_df = df_all[["Open", "High", "Low", "Close", "Volume"]].tail(30).sort_index(ascending=False)
                     st.dataframe(display_df, use_container_width=True)
 
                 with tab_info:
