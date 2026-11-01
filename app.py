@@ -35,6 +35,10 @@ if "my_portfolio" not in st.session_state:
         {"symbol": "7203.T", "market": "日股", "shares": 100, "cost": 2800.0}
     ]
 
+# 控制持股庫進階分析工具箱的展開狀態
+if "show_portfolio_analyzer" not in st.session_state:
+    st.session_state.show_portfolio_analyzer = False
+
 def detect_market(symbol: str) -> str:
     sym = symbol.upper().strip()
     if sym.endswith(".TW") or sym.endswith(".TWO"):
@@ -167,25 +171,211 @@ elif st.session_state.page == "portfolio":
         background-color: #FFFFFF !important;
         border-radius: 8px !important;
     }
+    .analyzer-card {
+        background-color: #EFEADB;
+        border: 1.5px solid #738A7A;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
     </style>
     """
     st.markdown(theme_css, unsafe_allow_html=True)
 
-    nav_col1, _, nav_col3 = st.columns([1.5, 4, 2.5])
+    # 頂部導覽與功能按鈕列
+    nav_col1, nav_col2, nav_col3 = st.columns([1.5, 3.5, 3])
     with nav_col1:
         if st.button("← 返回封面"):
             st.session_state.page = "welcome"
             st.query_params["page"] = "welcome"
             st.rerun()
+
     with nav_col3:
-        if st.button("🚀 前往個股深度分析", use_container_width=True):
-            st.session_state.page = "dashboard"
-            st.query_params["page"] = "dashboard"
+        btn_text = "❌ 關閉分析與試算" if st.session_state.show_portfolio_analyzer else "🧮 投資組合進階分析與加碼"
+        if st.button(btn_text, use_container_width=True):
+            st.session_state.show_portfolio_analyzer = not st.session_state.show_portfolio_analyzer
             st.rerun()
 
     st.markdown("## 💼 全球投資持股庫")
-    st.caption("支援多國股票分類、即時多維度損益與配置佔比。")
+    st.caption("管理持股部位、公式量化損益，並依現有資金試算加碼建議。")
 
+    # 預先抓取所有持股即時現價與資訊
+    portfolio_data = []
+    total_market_val = 0.0
+    total_cost_val = 0.0
+    today_total_change = 0.0
+
+    for item in st.session_state.my_portfolio:
+        sym = item["symbol"]
+        mkt = item.get("market", detect_market(sym))
+        shares = item["shares"]
+        cost = item["cost"]
+
+        try:
+            t = yf.Ticker(sym)
+            hist = t.history(period="2d")
+            info = t.info
+            curr_price = hist["Close"].iloc[-1] if not hist.empty else cost
+            prev_close = hist["Close"].iloc[-2] if len(hist) > 1 else curr_price
+            div_yield = info.get("dividendYield", 0) or 0
+        except Exception:
+            curr_price, prev_close = cost, cost
+            div_yield = 0
+
+        cost_sub = shares * cost
+        mkt_sub = shares * curr_price
+        diff = mkt_sub - cost_sub
+        diff_pct = (diff / cost_sub) * 100 if cost_sub > 0 else 0
+        day_diff = (curr_price - prev_close) * shares
+
+        total_market_val += mkt_sub
+        total_cost_val += cost_sub
+        today_total_change += day_diff
+
+        portfolio_data.append({
+            "symbol": sym,
+            "market": mkt,
+            "shares": shares,
+            "cost": cost,
+            "price": curr_price,
+            "cost_sub": cost_sub,
+            "mkt_sub": mkt_sub,
+            "diff": diff,
+            "diff_pct": diff_pct,
+            "div_yield": div_yield
+        })
+
+    # ==========================================
+    # 【新增區塊】：持股庫進階分析與資金試算工具箱
+    # ==========================================
+    if st.session_state.show_portfolio_analyzer and portfolio_data:
+        st.markdown('<div class="analyzer-card">', unsafe_allow_html=True)
+        st.markdown("### 🧮 投資報酬率量化模型與新資金加碼建議")
+        
+        tab_calc1, tab_calc2 = st.tabs(["📊 報酬率公式分析", "💰 現有資金最佳加碼做法"])
+
+        # 分頁 1：公式計算分析
+        with tab_calc1:
+            formula_choice = st.selectbox(
+                "選擇你想套用的投資評估公式：",
+                [
+                    "1. 簡易投資報酬率 (ROI) - 帳面總損益",
+                    "2. 年化複合增長率 (CAGR) - 每年複利成長率",
+                    "3. 成本現金殖利率 (Yield on Cost, YoC) - 原始本金被動現金流",
+                    "4. 夏普比率 (Sharpe Ratio) - 承擔風險的超額回報"
+                ]
+            )
+
+            if "ROI" in formula_choice:
+                tot_diff = total_market_val - total_cost_val
+                tot_roi = (tot_diff / total_cost_val) * 100 if total_cost_val > 0 else 0
+                st.write("**公式：** $\\text{ROI} = \\frac{\\text{當前總市值} - \\text{總成本}}{\\text{總成本}} \\times 100\\%$")
+                st.info(f"💡 目前總持股投入成本為 **${total_cost_val:,.2f}**，總市值為 **${total_market_val:,.2f}**，整體帳面投資報酬率 (ROI) 為 **{tot_roi:+.2f}%**。")
+
+            elif "CAGR" in formula_choice:
+                st.write("**公式：** $\\text{CAGR} = \\left( \\frac{\\text{當前市值}}{\\text{投入成本}} \\right)^{\\frac{1}{n}} - 1$")
+                years_held = st.slider("請設定持有時間（年數）：", min_value=0.5, max_value=15.0, value=2.0, step=0.5)
+                if total_cost_val > 0:
+                    cagr_val = ((total_market_val / total_cost_val) ** (1.0 / years_held) - 1.0) * 100
+                    st.success(f"📈 經過 {years_held} 年的複利滾動，投資組合的**年化報酬率 (CAGR) 為 {cagr_val:+.2f}% / 年**。")
+
+            elif "YoC" in formula_choice:
+                st.write("**公式：** $\\text{YoC} = \\frac{\\text{預估每股年配息}}{\\text{原始每股買入成本}} \\times 100\\%$")
+                st.caption("計算各檔股票相對於你最初投入成本的現金流產出能力：")
+                yoc_list = []
+                for p in portfolio_data:
+                    est_annual_div = p["price"] * p["div_yield"]
+                    yoc = (est_annual_div / p["cost"] * 100) if p["cost"] > 0 else 0
+                    yoc_list.append({
+                        "股票代號": p["symbol"],
+                        "買入成本": f"${p['cost']:.2f}",
+                        "目前股價": f"${p['price']:.2f}",
+                        "當前殖利率": f"{p['div_yield']*100:.2f}%",
+                        "成本殖利率 (YoC)": f"{yoc:.2f}%"
+                    })
+                st.dataframe(pd.DataFrame(yoc_list), use_container_width=True)
+
+            elif "Sharpe" in formula_choice:
+                st.write("**公式：** $\\text{Sharpe Ratio} = \\frac{R_p - R_f}{\\sigma_p}$")
+                c1, c2 = st.columns(2)
+                with c1:
+                    rf_rate = st.number_input("設定無風險利率 %（如美國公債利率）：", value=3.5, step=0.1)
+                with c2:
+                    st_dev = st.number_input("預估年化波動度 (標準差) %：", value=18.0, step=0.5)
+
+                tot_diff = total_market_val - total_cost_val
+                tot_roi = (tot_diff / total_cost_val) * 100 if total_cost_val > 0 else 0
+                sharpe = (tot_roi - rf_rate) / st_dev if st_dev > 0 else 0
+
+                eval_text = "表現優異，承擔每單位風險能換取良好超額收益！" if sharpe > 1.0 else ("表現尚可，符合基準。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
+                st.metric("整體夏普比率 (Sharpe Ratio)", f"{sharpe:.2f}")
+                st.caption(f"評估結論：{eval_text}")
+
+        # 分頁 2：新資金加碼最佳配置試算
+        with tab_calc2:
+            st.markdown("#### 💡 現有閒置資金最佳加碼策略")
+            st.caption("輸入你手邊目前準備投入的資金，系統將依最佳資產配置模型計算每檔股票應加碼的股數。")
+
+            c_invest, c_strategy = st.columns([1, 1])
+            with c_invest:
+                idle_cash = st.number_input("準備投入的新資金金額 ($)：", min_value=100.0, value=30000.0, step=1000.0)
+            with c_strategy:
+                strategy = st.selectbox(
+                    "選擇加碼策略：",
+                    [
+                        "⚖️ 再平衡逢低加碼法（優先補貼跌幅較大或佔比偏低者）",
+                        "🚀 強勢順勢加碼法（優先加碼目前正報酬最高者）",
+                        "🌐 平均分散加碼法（平均將資金切成等分）"
+                    ]
+                )
+
+            # 計算分配權重
+            weights = {}
+            if "再平衡" in strategy:
+                # 報酬率越低者權重越高
+                neg_scores = {}
+                for p in portfolio_data:
+                    neg_scores[p["symbol"]] = max(0.1, 100.0 - p["diff_pct"])
+                sum_scores = sum(neg_scores.values())
+                weights = {sym: score / sum_scores for sym, score in neg_scores.items()}
+
+            elif "強勢" in strategy:
+                # 報酬率越高者權重越高
+                pos_scores = {}
+                for p in portfolio_data:
+                    pos_scores[p["symbol"]] = max(0.1, 50.0 + p["diff_pct"])
+                sum_scores = sum(pos_scores.values())
+                weights = {sym: score / sum_scores for sym, score in pos_scores.items()}
+
+            else:  # 平均分散
+                n = len(portfolio_data)
+                weights = {p["symbol"]: 1.0 / n for p in portfolio_data}
+
+            # 產生建議買入清單
+            advice_list = []
+            for p in portfolio_data:
+                sym = p["symbol"]
+                w = weights.get(sym, 0)
+                alloc_cash = idle_cash * w
+                suggest_shares = int(alloc_cash // p["price"])
+                actual_spent = suggest_shares * p["price"]
+
+                advice_list.append({
+                    "股票代號": sym,
+                    "市場": p["market"],
+                    "目前現價": f"${p['price']:.2f}",
+                    "建議配置比例": f"{w*100:.1f}%",
+                    "分配資金": f"${alloc_cash:,.0f}",
+                    "建議買進股數": f"{suggest_shares:,} 股",
+                    "預計支出": f"${actual_spent:,.0f}"
+                })
+
+            st.dataframe(pd.DataFrame(advice_list), use_container_width=True)
+            st.success("✅ 依此策略加碼能使資產結構更健康，避免追高殺低。")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 1. 新增股票面板
     with st.expander("➕ 新增股票到持股庫", expanded=False):
         c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
         with c_sym:
@@ -224,6 +414,7 @@ elif st.session_state.page == "portfolio":
 
     st.write("")
 
+    # 2. 依國家分類分頁檢視
     all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
     tab_list = ["🌐 全部持股"] + [f"📍 {m}" for m in all_markets]
     tabs = st.tabs(tab_list)
@@ -232,17 +423,13 @@ elif st.session_state.page == "portfolio":
         with current_tab:
             target_filter = None if i == 0 else all_markets[i - 1]
             filtered_items = [
-                (idx, item) for idx, item in enumerate(st.session_state.my_portfolio)
-                if target_filter is None or item.get("market") == target_filter
+                (idx, item) for idx, item in enumerate(portfolio_data)
+                if target_filter is None or item["market"] == target_filter
             ]
 
             if not filtered_items:
                 st.info("此分類目前尚無任何持股資料。")
             else:
-                total_market_val = 0.0
-                total_cost_val = 0.0
-                today_total_change = 0.0
-
                 h1, h2, h3, h4, h5, h6 = st.columns([2, 1.2, 1.3, 1.3, 2, 2.2])
                 h1.markdown("**代號 (市場)**")
                 h2.markdown("**持有股數**")
@@ -252,33 +439,14 @@ elif st.session_state.page == "portfolio":
                 h6.markdown("**操作**")
                 st.divider()
 
-                for orig_idx, item in filtered_items:
-                    sym = item["symbol"]
-                    mkt = item.get("market", "未分類")
-                    shares = item["shares"]
-                    cost = item["cost"]
-
-                    try:
-                        t = yf.Ticker(sym)
-                        hist = t.history(period="2d")
-                        if not hist.empty:
-                            curr_price = hist["Close"].iloc[-1]
-                            prev_close = hist["Close"].iloc[-2] if len(hist) > 1 else curr_price
-                        else:
-                            curr_price, prev_close = cost, cost
-                    except Exception:
-                        curr_price, prev_close = cost, cost
-
-                    cost_sub = shares * cost
-                    mkt_sub = shares * curr_price
-                    diff = mkt_sub - cost_sub
-                    diff_pct = (diff / cost_sub) * 100 if cost_sub > 0 else 0
-
-                    day_diff_sub = (curr_price - prev_close) * shares
-                    today_total_change += day_diff_sub
-
-                    total_market_val += mkt_sub
-                    total_cost_val += cost_sub
+                for orig_idx, p in filtered_items:
+                    sym = p["symbol"]
+                    mkt = p["market"]
+                    shares = p["shares"]
+                    cost = p["cost"]
+                    curr_price = p["price"]
+                    diff = p["diff"]
+                    diff_pct = p["diff_pct"]
 
                     profit_color = get_market_color(mkt, is_up=(diff >= 0))
 
@@ -292,7 +460,7 @@ elif st.session_state.page == "portfolio":
                     with r6:
                         b_col1, b_col2 = st.columns([2, 1])
                         with b_col1:
-                            if st.button("📊 深度分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
+                            if st.button("📊 走勢分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
                                 st.session_state.active_ticker = sym
                                 st.session_state.page = "dashboard"
                                 st.query_params["page"] = "dashboard"
@@ -303,18 +471,19 @@ elif st.session_state.page == "portfolio":
                                 st.rerun()
 
                 st.divider()
-                tot_diff = total_market_val - total_cost_val
-                tot_pct = (tot_diff / total_cost_val) * 100 if total_cost_val > 0 else 0
-                
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("持股總現值", f"{total_market_val:,.2f}")
-                m2.metric("投入總成本", f"{total_cost_val:,.2f}")
-                m3.metric("累積未實現損益", f"{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
-                m4.metric("今日單日總波動", f"{today_total_change:+,.2f}")
+
+    # 底部總覽指標
+    tot_diff = total_market_val - total_cost_val
+    tot_pct = (tot_diff / total_cost_val) * 100 if total_cost_val > 0 else 0
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("持股總現值", f"{total_market_val:,.2f}")
+    m2.metric("投入總成本", f"{total_cost_val:,.2f}")
+    m3.metric("累積未實現損益", f"{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
+    m4.metric("今日單日總波動", f"{today_total_change:+,.2f}")
 
 
 # ==========================================
-# 頁面 3：個股行情與 3D 浮現進場走勢圖（Dashboard Screen）
+# 頁面 3：個股行情與全方位數據（Dashboard Screen）
 # ==========================================
 elif st.session_state.page == "dashboard":
     dash_css = """
@@ -353,7 +522,6 @@ elif st.session_state.page == "dashboard":
         border-radius: 8px !important;
     }
 
-    /* 科技感載入動畫：微光呼吸波紋效果 */
     .premium-loader {
         display: flex;
         flex-direction: column;
@@ -385,7 +553,6 @@ elif st.session_state.page == "dashboard":
         to { opacity: 1; }
     }
 
-    /* 圖表外層立體景深容器：徹底消除閃爍，並賦予由後向前浮現效果 */
     .chart-3d-stage {
         perspective: 1200px;
         width: 100%;
@@ -393,14 +560,10 @@ elif st.session_state.page == "dashboard":
         border-radius: 14px;
         overflow: hidden;
     }
-
-    /* 華麗進場動畫：從後方深處 (scale 0.88, opacity 0, blur) 平滑推進到眼前 (scale 1.0) */
     .chart-forward-anim {
         animation: zoomForwardPop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
         transform-origin: center center;
-        will-change: transform, opacity, filter;
     }
-
     @keyframes zoomForwardPop {
         0% {
             opacity: 0;
@@ -502,7 +665,7 @@ elif st.session_state.page == "dashboard":
                 c_mode, c_tools = st.columns([3, 2])
                 with c_mode:
                     preset_view = st.selectbox(
-                        "預設聚焦區間（可直接在圖上縮放以看更多時間）：",
+                        "預設聚焦區間：",
                         ["最近 1 個月", "最近 3 個月", "最近 6 個月", "最近 1 年", "最近 4 年", "上市以來全部"],
                         index=1
                     )
@@ -583,7 +746,6 @@ elif st.session_state.page == "dashboard":
                     )
                 )
 
-                # 套用 3D 景深前推外層容器
                 st.markdown('<div class="chart-3d-stage"><div class="chart-forward-anim">', unsafe_allow_html=True)
                 st.plotly_chart(
                     fig,
