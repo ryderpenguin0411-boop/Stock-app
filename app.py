@@ -854,6 +854,7 @@ elif st.session_state.page == "dashboard":
                 ])
 
                 with tab_chart:
+                    # 1. 時間區間按鈕組
                     st.write("**快捷時間區間：**")
                     b1, b2, b3, b4, b5, b6, b_type = st.columns([1, 1, 1, 1, 1, 1.2, 2.5])
                     with b1:
@@ -877,8 +878,36 @@ elif st.session_state.page == "dashboard":
                     with b_type:
                         chart_render_type = st.radio("類型：", ["平滑折線", "蠟燭 K 線"], horizontal=True)
 
+                    # 2. 多線條與指標選單
+                    show_indicators = st.multiselect(
+                        "疊加技術線條與輔助指標：",
+                        [
+                            "MA5 (週線)",
+                            "MA20 (月線)",
+                            "MA60 (季線)",
+                            "布林通道 (Bollinger Bands)",
+                            "個人買入成本線",
+                            "52 週高低價參考線"
+                        ],
+                        default=["MA20 (月線)", "布林通道 (Bollinger Bands)", "個人買入成本線"]
+                    )
+
                     plot_data = full_df.copy()
-                    plot_data["MA20"] = plot_data["Close"].rolling(window=20).mean()
+
+                    # 計算各類均線
+                    if "MA5 (週線)" in show_indicators and len(plot_data) >= 5:
+                        plot_data["MA5"] = plot_data["Close"].rolling(window=5).mean()
+                    if "MA20 (月線)" in show_indicators and len(plot_data) >= 20:
+                        plot_data["MA20"] = plot_data["Close"].rolling(window=20).mean()
+                    if "MA60 (季線)" in show_indicators and len(plot_data) >= 60:
+                        plot_data["MA60"] = plot_data["Close"].rolling(window=60).mean()
+
+                    # 計算布林通道
+                    if "布林通道 (Bollinger Bands)" in show_indicators and len(plot_data) >= 20:
+                        bb_ma = plot_data["Close"].rolling(window=20).mean()
+                        bb_std = plot_data["Close"].rolling(window=20).std()
+                        plot_data["BB_Upper"] = bb_ma + (bb_std * 2)
+                        plot_data["BB_Lower"] = bb_ma - (bb_std * 2)
 
                     latest_date = plot_data.index.max()
                     delta_map = {
@@ -892,12 +921,14 @@ elif st.session_state.page == "dashboard":
                     init_delta = delta_map.get(st.session_state.chart_range_preset, timedelta(days=90))
                     init_start = (latest_date - init_delta) if init_delta else plot_data.index.min()
 
+                    # 自適應當前時間區間高低點
                     view_df = plot_data[plot_data.index >= init_start]
                     y_min = view_df["Low"].min() * 0.95 if "Low" in view_df else view_df["Close"].min() * 0.95
                     y_max = view_df["High"].max() * 1.05 if "High" in view_df else view_df["Close"].max() * 1.05
 
                     fig = go.Figure()
 
+                    # 主圖：折線或 K 線
                     if chart_render_type == "平滑折線":
                         fig.add_trace(go.Scatter(
                             x=plot_data.index, y=plot_data["Close"], mode='lines', name='收盤價',
@@ -916,18 +947,74 @@ elif st.session_state.page == "dashboard":
                             name='K 線', yaxis='y1'
                         ))
 
-                    if "MA20" in plot_data:
-                        fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA20"], mode='lines', name='MA20', line=dict(color='#E67E22', width=1.5), yaxis='y1'))
+                    # 繪製 MA5
+                    if "MA5" in plot_data:
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["MA5"],
+                            mode='lines', name='MA5 (週線)',
+                            line=dict(color='#2980B9', width=1.5), yaxis='y1'
+                        ))
 
+                    # 繪製 MA20
+                    if "MA20" in plot_data:
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["MA20"],
+                            mode='lines', name='MA20 (月線)',
+                            line=dict(color='#E67E22', width=1.5), yaxis='y1'
+                        ))
+
+                    # 繪製 MA60
+                    if "MA60" in plot_data:
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["MA60"],
+                            mode='lines', name='MA60 (季線)',
+                            line=dict(color='#8E44AD', width=1.5), yaxis='y1'
+                        ))
+
+                    # 繪製布林通道（上軌與下軌，中間加半透明通道陰影）
+                    if "BB_Upper" in plot_data and "BB_Lower" in plot_data:
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["BB_Upper"],
+                            mode='lines', name='布林上軌',
+                            line=dict(color='rgba(127, 140, 141, 0.65)', width=1, dash='dash'),
+                            yaxis='y1'
+                        ))
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["BB_Lower"],
+                            mode='lines', name='布林下軌',
+                            line=dict(color='rgba(127, 140, 141, 0.65)', width=1, dash='dash'),
+                            fill='tonexty', fillcolor='rgba(127, 140, 141, 0.08)',
+                            yaxis='y1'
+                        ))
+
+                    # 成交量副軸
                     vol_colors = [(theme_color if r["Close"] >= r["Open"] else "#9E9E9E") for _, r in plot_data.iterrows()]
                     fig.add_trace(go.Bar(
                         x=plot_data.index, y=plot_data["Volume"],
-                        name="成交量", marker_color=vol_colors, opacity=0.35, yaxis='y2'
+                        name="成交量", marker_color=vol_colors, opacity=0.3, yaxis='y2'
                     ))
+
+                    # 疊加個人買入成本水平線
+                    if "個人買入成本線" in show_indicators:
+                        user_holding = next((item for item in st.session_state.my_portfolio if item["symbol"] == current_ticker), None)
+                        if user_holding:
+                            cost_val = user_holding["cost"]
+                            fig.add_hline(
+                                y=cost_val, line_dash="dot", line_color="#D35400", line_width=1.8,
+                                annotation_text=f"持股成本: {cost_val:.2f}", annotation_position="top left",
+                                annotation_font=dict(color="#D35400", size=10)
+                            )
+
+                    # 疊加 52 週高低價參考水平線
+                    if "52 週高低價參考線" in show_indicators:
+                        h52 = info.get('fiftyTwoWeekHigh', full_df['High'].tail(252).max())
+                        l52 = info.get('fiftyTwoWeekLow', full_df['Low'].tail(252).min())
+                        fig.add_hline(y=h52, line_dash="dash", line_color="#C0392B", line_width=1, annotation_text="52W 高", annotation_position="top right")
+                        fig.add_hline(y=l52, line_dash="dash", line_color="#27AE60", line_width=1, annotation_text="52W 低", annotation_position="bottom right")
 
                     fig.update_layout(
                         paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                        margin=dict(l=5, r=10, t=10, b=10), height=460,
+                        margin=dict(l=5, r=10, t=10, b=10), height=480,
                         hovermode="x unified",
                         dragmode="pan",
                         xaxis=dict(
@@ -957,7 +1044,7 @@ elif st.session_state.page == "dashboard":
                     st.markdown('<div class="plotly-touch-stage">', unsafe_allow_html=True)
                     st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
                     st.markdown('</div>', unsafe_allow_html=True)
-                    st.caption("💡 提示：點擊上方區間按鈕可快速伸展歷史時間軸，或拖曳底部的時間滑桿。")
+                    st.caption("💡 提示：點選上方標籤可疊加或關閉指標線，點擊快捷區間鈕可伸展時間軸。")
 
                 with tab_benchmark:
                     bm_symbol, bm_name = get_market_benchmark(market_type)
