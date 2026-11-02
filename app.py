@@ -1,25 +1,3 @@
-# 找到 app.py 開頭處，在 set_page_config 之後立即插入：
-st.markdown("""
-<style>
-/* 強制將所有最底層容器、iframe 與加載畫布全鎖死為米色，杜絕黑底露餡 */
-:root, html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .main, .stApp {
-    background-color: #F7F4EA !important;
-    background: #F7F4EA !important;
-}
-
-/* 隱藏原生頂部工具列與頁腳，減少渲染閃爍 */
-#MainMenu, header, footer, div[data-testid="stDecoration"] {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* 關閉元素進場時的黑影過渡 */
-* {
-    -webkit-tap-highlight-color: transparent !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -29,7 +7,7 @@ import base64
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 
-# 1. 基礎頁面配置
+# 1. 基礎頁面配置（必須是第一個執行的 Streamlit 命令）
 st.set_page_config(
     page_title="Stock + Analyze",
     page_icon="📈",
@@ -37,8 +15,24 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-DATA_FILE = "portfolio.json"
-WATCHLIST_FILE = "watchlist.json"
+# 2. 全域防閃爍樣式（必須在 import streamlit as st 之後）
+st.markdown("""
+<style>
+:root, html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .main, .stApp {
+    background-color: #F7F4EA !important;
+    background: #F7F4EA !important;
+}
+
+#MainMenu, header, footer, div[data-testid="stDecoration"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+* {
+    -webkit-tap-highlight-color: transparent !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # 2. 本地資料持久化存取函式
 def load_portfolio_data():
