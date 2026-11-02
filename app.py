@@ -1,3 +1,25 @@
+# 找到 app.py 開頭處，在 set_page_config 之後立即插入：
+st.markdown("""
+<style>
+/* 強制將所有最底層容器、iframe 與加載畫布全鎖死為米色，杜絕黑底露餡 */
+:root, html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .main, .stApp {
+    background-color: #F7F4EA !important;
+    background: #F7F4EA !important;
+}
+
+/* 隱藏原生頂部工具列與頁腳，減少渲染閃爍 */
+#MainMenu, header, footer, div[data-testid="stDecoration"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* 關閉元素進場時的黑影過渡 */
+* {
+    -webkit-tap-highlight-color: transparent !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -6,7 +28,6 @@ import os
 import base64
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 # 1. 基礎頁面配置
 st.set_page_config(
@@ -19,7 +40,7 @@ st.set_page_config(
 DATA_FILE = "portfolio.json"
 WATCHLIST_FILE = "watchlist.json"
 
-# 2. 本地持久化資料存取
+# 2. 本地資料持久化存取函式
 def load_portfolio_data():
     default_data = [
         {"symbol": "2330.TW", "market": "台股", "shares": 100, "cost": 950.0, "stop_loss": -10.0, "take_profit": 20.0},
@@ -65,6 +86,9 @@ if "page" not in st.session_state:
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = "2330.TW"
 
+if "chart_range_preset" not in st.session_state:
+    st.session_state.chart_range_preset = "3M"
+
 if "market_rules" not in st.session_state:
     st.session_state.market_rules = {
         "台股": "漲紅跌綠",
@@ -104,13 +128,6 @@ def get_market_color(market_name: str, is_up: bool) -> str:
         return "#E53935" if is_up else "#2E7D32"
     else:
         return "#2E7D32" if is_up else "#E53935"
-
-def compute_rsi(data, window=14):
-    delta = data.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
 
 @st.cache_data(ttl=300)
 def fetch_stock_full_data(symbol: str):
@@ -192,23 +209,23 @@ if st.session_state.page == "welcome":
     except Exception:
         img_src = ""
 
-    welcome_css = f"""
+    welcome_css = """
     <style>
-    html, body, [data-testid="stAppViewContainer"], .stApp {{
+    html, body, [data-testid="stAppViewContainer"], .stApp {
         background-color: #F7F4EA !important;
-    }}
-    #MainMenu, header, footer, div[data-testid="stDecoration"] {{
+    }
+    #MainMenu, header, footer, div[data-testid="stDecoration"] {
         display: none !important;
         visibility: hidden !important;
-    }}
-    .block-container {{
+    }
+    .block-container {
         padding: 0 !important;
         margin: 0 !important;
         max-width: 100vw !important;
         width: 100vw !important;
         height: 100vh !important;
-    }}
-    .splash-container {{
+    }
+    .splash-container {
         position: relative;
         width: 100vw;
         height: 100vh;
@@ -216,14 +233,14 @@ if st.session_state.page == "welcome":
         align-items: center;
         justify-content: center;
         background-color: #F7F4EA;
-    }}
-    .splash-img {{
+    }
+    .splash-img {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
         display: block;
-    }}
-    .continue-hitbox {{
+    }
+    .continue-hitbox {
         position: absolute;
         top: 71.8%;
         left: 50%;
@@ -234,7 +251,7 @@ if st.session_state.page == "welcome":
         z-index: 9999;
         text-decoration: none;
         background: transparent;
-    }}
+    }
     </style>
     """
     st.markdown(welcome_css, unsafe_allow_html=True)
@@ -389,7 +406,6 @@ elif st.session_state.page == "portfolio":
             "mkt_sub_twd": mkt_sub * fx_rate
         })
 
-    # 優化版甜甜圈圖（無重疊標籤）
     if portfolio_data:
         with st.expander("📊 查看資產配置甜甜圈圖（市場與個股權重）", expanded=True):
             col_pie1, col_pie2 = st.columns(2)
@@ -497,7 +513,7 @@ elif st.session_state.page == "portfolio":
                 tot_diff = total_market_val_calc - total_cost_val_calc
                 tot_roi = (tot_diff / total_cost_val_calc) * 100 if total_cost_val_calc > 0 else 0
                 sharpe = (tot_roi - rf_rate) / st_dev if st_dev > 0 else 0
-                eval_text = "表現優異，承擔每單位風險能換取良好超額收益！" if sharpe > 1.0 else ("表現尚可。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
+                eval_text = "表現優異！" if sharpe > 1.0 else ("表現尚可。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
                 st.metric("整體夏普比率 (Sharpe Ratio)", f"{sharpe:.2f}")
                 st.caption(f"評估結論：{eval_text}")
 
@@ -638,7 +654,6 @@ elif st.session_state.page == "portfolio":
 
     st.write("")
 
-    # 持股列表
     all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
     tabs = st.tabs(["🌐 全部持股"] + [f"📍 {m}" for m in all_markets])
 
@@ -712,7 +727,6 @@ elif st.session_state.page == "portfolio":
     m3.metric("累積未實現損益", f"{prefix}{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
     m4.metric("今日單日波動", f"{prefix}{today_total_change_calc:+,.2f}")
 
-    # 無干擾 CSV 下載模式
     if portfolio_data:
         with st.expander("📥 匯出持股資料報表 (CSV)", expanded=False):
             csv_df = pd.DataFrame(portfolio_data)[[
@@ -763,16 +777,11 @@ elif st.session_state.page == "dashboard":
         background-color: #738A7A !important;
         color: #F7F4EA !important;
     }
-    .left-panel {
-        background-color: #EFEADB;
-        border: 1px solid #D8D2C0;
-        border-radius: 10px;
-        padding: 12px;
-        height: 100%;
-    }
-    .chart-container {
-        border-radius: 10px;
-        overflow: hidden;
+    /* 關鍵修復：確保 iPad 雙指手勢不被 Safari 攔截 */
+    .plotly-touch-stage {
+        touch-action: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
     }
     </style>
     """
@@ -780,7 +789,6 @@ elif st.session_state.page == "dashboard":
 
     render_global_ticker()
 
-    # 頂部導航
     c_n1, c_n2, _ = st.columns([1.5, 1.5, 6])
     with c_n1:
         if st.button("← 回持股庫"):
@@ -793,10 +801,8 @@ elif st.session_state.page == "dashboard":
             st.query_params["page"] = "welcome"
             st.rerun()
 
-    # iPad 橫向分屏佈局：左欄 32% (清單與快速搜尋) / 右欄 68% (走勢圖與深度數據)
     col_left, col_right = st.columns([1.1, 2.5])
 
-    # ---------------- 左欄：快速選股導航 ----------------
     with col_left:
         st.markdown("#### 🔍 快捷切換股票")
         in_sym = st.text_input("輸入股票代號：", value=st.session_state.active_ticker, key="search_left_sym")
@@ -822,7 +828,6 @@ elif st.session_state.page == "dashboard":
                 st.session_state.active_ticker = s
                 st.rerun()
 
-    # ---------------- 右欄：專業走勢與深度指標 ----------------
     with col_right:
         current_ticker = st.session_state.active_ticker
         market_type = detect_market(current_ticker)
@@ -841,7 +846,6 @@ elif st.session_state.page == "dashboard":
 
                 st.markdown(f"### {company_name} ({current_ticker}) · <span style='font-size:1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
 
-                # 4 核心關鍵指標列
                 r1, r2, r3, r4 = st.columns(4)
                 r1.metric("收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
                 r2.metric("52 週最高/最低", f"{info.get('fiftyTwoWeekHigh', full_df['High'].tail(252).max()):.1f} / {info.get('fiftyTwoWeekLow', full_df['Low'].tail(252).min()):.1f}")
@@ -855,14 +859,28 @@ elif st.session_state.page == "dashboard":
                 ])
 
                 with tab_chart:
-                    c_mode, c_type = st.columns([2, 1.5])
-                    with c_mode:
-                        preset_view = st.selectbox(
-                            "聚焦時間：",
-                            ["最近 1 個月", "最近 3 個月", "最近 6 個月", "最近 1 年", "最近 4 年", "上市以來全部"],
-                            index=1
-                        )
-                    with c_type:
+                    # 原生 TradingView 快速切換按鈕條（不彈出 iPad 鍵盤）
+                    st.write("**快捷時間區間：**")
+                    b1, b2, b3, b4, b5, b6, b_type = st.columns([1, 1, 1, 1, 1, 1.2, 2.5])
+                    with b1:
+                        if st.button("1 個月", key="btn_p_1m", use_container_width=True):
+                            st.session_state.chart_range_preset = "1M"
+                    with b2:
+                        if st.button("3 個月", key="btn_p_3m", use_container_width=True):
+                            st.session_state.chart_range_preset = "3M"
+                    with b3:
+                        if st.button("6 個月", key="btn_p_6m", use_container_width=True):
+                            st.session_state.chart_range_preset = "6M"
+                    with b4:
+                        if st.button("1 年", key="btn_p_1y", use_container_width=True):
+                            st.session_state.chart_range_preset = "1Y"
+                    with b5:
+                        if st.button("4 年", key="btn_p_4y", use_container_width=True):
+                            st.session_state.chart_range_preset = "4Y"
+                    with b6:
+                        if st.button("上市以來", key="btn_p_all", use_container_width=True):
+                            st.session_state.chart_range_preset = "ALL"
+                    with b_type:
                         chart_render_type = st.radio("類型：", ["平滑折線", "蠟燭 K 線"], horizontal=True)
 
                     plot_data = full_df.copy()
@@ -870,17 +888,21 @@ elif st.session_state.page == "dashboard":
 
                     latest_date = plot_data.index.max()
                     delta_map = {
-                        "最近 1 個月": timedelta(days=30),
-                        "最近 3 個月": timedelta(days=90),
-                        "最近 6 個月": timedelta(days=180),
-                        "最近 1 年": timedelta(days=365),
-                        "最近 4 年": timedelta(days=365 * 4),
-                        "上市以來全部": None
+                        "1M": timedelta(days=30),
+                        "3M": timedelta(days=90),
+                        "6M": timedelta(days=180),
+                        "1Y": timedelta(days=365),
+                        "4Y": timedelta(days=365 * 4),
+                        "ALL": None
                     }
-                    init_delta = delta_map[preset_view]
+                    init_delta = delta_map.get(st.session_state.chart_range_preset, timedelta(days=90))
                     init_start = (latest_date - init_delta) if init_delta else plot_data.index.min()
 
-                    # 採用原生自適應 Auto-Fit Y 軸（雙 Y 軸配置）
+                    # 裁切當前視角內的極值以實現精準 Auto-fit
+                    view_df = plot_data[plot_data.index >= init_start]
+                    y_min = view_df["Low"].min() * 0.95 if "Low" in view_df else view_df["Close"].min() * 0.95
+                    y_max = view_df["High"].max() * 1.05 if "High" in view_df else view_df["Close"].max() * 1.05
+
                     fig = go.Figure()
 
                     if chart_render_type == "平滑折線":
@@ -904,28 +926,30 @@ elif st.session_state.page == "dashboard":
                     if "MA20" in plot_data:
                         fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA20"], mode='lines', name='MA20', line=dict(color='#E67E22', width=1.5), yaxis='y1'))
 
-                    # 成交量置於底層 (y2 獨立副軸，高度限制在 20%)
                     vol_colors = [(theme_color if r["Close"] >= r["Open"] else "#9E9E9E") for _, r in plot_data.iterrows()]
                     fig.add_trace(go.Bar(
                         x=plot_data.index, y=plot_data["Volume"],
                         name="成交量", marker_color=vol_colors, opacity=0.35, yaxis='y2'
                     ))
 
-                    # 關鍵 Auto-Fit 設定：X 軸平移、價格主軸 autorange 隨當前畫面自適應
+                    # 啟用 Rangeslider 與平移模式
                     fig.update_layout(
                         paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
                         margin=dict(l=5, r=10, t=10, b=10), height=460,
-                        hovermode="x unified", dragmode="pan",
+                        hovermode="x unified",
+                        dragmode="pan",
                         xaxis=dict(
                             showgrid=True, gridcolor="#E3DEC8", color="#2F3E34",
                             range=[init_start, latest_date],
+                            rangeslider=dict(visible=True, thickness=0.08, bgcolor="#EFEADB"),
                             type="date"
                         ),
                         yaxis=dict(
                             title="價格",
                             showgrid=True, gridcolor="#E3DEC8", color="#2F3E34",
                             side="right",
-                            autorange=True,       # 隨目前時間視野自動放大/縮小價格，永不壓平
+                            range=[y_min, y_max],
+                            autorange=False,
                             fixedrange=False
                         ),
                         yaxis2=dict(
@@ -934,12 +958,14 @@ elif st.session_state.page == "dashboard":
                             side='left',
                             showgrid=False,
                             showticklabels=False,
-                            range=[0, plot_data["Volume"].max() * 4.5] # 限制成交量不擋住價格線
+                            range=[0, plot_data["Volume"].max() * 4.5]
                         )
                     )
 
+                    st.markdown('<div class="plotly-touch-stage">', unsafe_allow_html=True)
                     st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
-                    st.caption("💡 iPad 觸控手勢：單指可平移滑動時間軸，雙指張開縮放歷史時間，價格高低自動貼合滿版。")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.caption("💡 提示：點擊上方區間按鈕可快速伸展歷史時間軸，或拖曳底部的時間滑桿。")
 
                 with tab_benchmark:
                     bm_symbol, bm_name = get_market_benchmark(market_type)
