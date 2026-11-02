@@ -17,6 +17,7 @@ st.set_page_config(
 )
 
 DATA_FILE = "portfolio.json"
+WATCHLIST_FILE = "watchlist.json"
 
 # 2. 本地資料持久化存取函式
 def load_portfolio_data():
@@ -33,13 +34,29 @@ def load_portfolio_data():
             return default_data
     return default_data
 
-
 def save_portfolio_data(data):
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        st.error(f"儲存失敗：{e}")
+        st.error(f"儲存持股失敗：{e}")
+
+def load_watchlist_data():
+    default_watch = ["2454.TW", "AAPL", "MSFT", "9984.T"]
+    if os.path.exists(WATCHLIST_FILE):
+        try:
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default_watch
+    return default_watch
+
+def save_watchlist_data(data):
+    try:
+        with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"儲存自選名單失敗：{e}")
 
 # 狀態管理
 if "page" not in st.session_state:
@@ -57,6 +74,9 @@ if "market_rules" not in st.session_state:
 
 if "my_portfolio" not in st.session_state:
     st.session_state.my_portfolio = load_portfolio_data()
+
+if "my_watchlist" not in st.session_state:
+    st.session_state.my_watchlist = load_watchlist_data()
 
 if "show_portfolio_analyzer" not in st.session_state:
     st.session_state.show_portfolio_analyzer = False
@@ -97,7 +117,8 @@ def fetch_stock_full_data(symbol: str):
     stock = yf.Ticker(symbol)
     df = stock.history(period="max")
     info = stock.info
-    return df, info
+    news = getattr(stock, "news", [])
+    return df, info, news
 
 @st.cache_data(ttl=300)
 def fetch_benchmark_data(benchmark_symbol: str, start_date):
@@ -118,6 +139,46 @@ def fetch_exchange_rates():
     except Exception:
         pass
     return rates
+
+@st.cache_data(ttl=300)
+def fetch_global_indices():
+    indices = [
+        {"name": "台股加權", "sym": "^TWII"},
+        {"name": "標普 500", "sym": "^GSPC"},
+        {"name": "日經 225", "sym": "^N225"},
+        {"name": "美元/台幣", "sym": "USDTWD=X"}
+    ]
+    results = []
+    for item in indices:
+        try:
+            h = yf.Ticker(item["sym"]).history(period="2d")
+            if len(h) >= 2:
+                c = h["Close"].iloc[-1]
+                p = h["Close"].iloc[-2]
+                diff = c - p
+                pct = (diff / p) * 100
+                results.append({"name": item["name"], "price": c, "diff": diff, "pct": pct})
+            elif len(h) == 1:
+                results.append({"name": item["name"], "price": h["Close"].iloc[-1], "diff": 0.0, "pct": 0.0})
+        except Exception:
+            continue
+    return results
+
+def render_global_ticker():
+    items = fetch_global_indices()
+    if items:
+        cols = st.columns(len(items))
+        for col, it in zip(cols, items):
+            color = "#E53935" if it["diff"] > 0 else ("#2E7D32" if it["diff"] < 0 else "#7F8C8D")
+            with col:
+                st.markdown(f"""
+                <div style="background:#EFEADB; padding:6px 12px; border-radius:8px; border:1px solid #D8D2C0; text-align:center;">
+                    <span style="font-size:0.8rem; color:#556B5D; font-weight:bold;">{it['name']}</span><br>
+                    <span style="font-size:0.95rem; font-weight:bold; color:#2F3E34;">{it['price']:,.2f}</span>
+                    <span style="font-size:0.8rem; color:{color}; font-weight:bold;">({it['pct']:+.2f}%)</span>
+                </div>
+                """, unsafe_allow_html=True)
+        st.write("")
 
 
 # ==========================================
@@ -149,6 +210,11 @@ if st.session_state.page == "welcome":
         max-width: 100vw !important;
         width: 100vw !important;
         height: 100vh !important;
+        animation: pageFadeIn 0.45s ease-out forwards;
+    }}
+    @keyframes pageFadeIn {{
+        0% {{ opacity: 0; }}
+        100% {{ opacity: 1; }}
     }}
     .splash-container {{
         position: relative;
@@ -200,9 +266,22 @@ elif st.session_state.page == "portfolio":
         background-color: #F7F4EA !important;
         color: #2F3E34 !important;
     }
+    /* 全域滑順進場過渡動畫 */
     .block-container {
-        padding: 2rem 2.5rem !important;
+        padding: 1.5rem 2.5rem !important;
         max-width: 1250px !important;
+        animation: pageSlideFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: transform, opacity;
+    }
+    @keyframes pageSlideFade {
+        0% {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -219,10 +298,14 @@ elif st.session_state.page == "portfolio":
         border: 1.5px solid #738A7A !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
+        transition: background-color 0.2s ease, transform 0.1s ease !important;
     }
     div[data-testid="stButton"] > button:hover {
         background-color: #738A7A !important;
         color: #F7F4EA !important;
+    }
+    div[data-testid="stButton"] > button:active {
+        transform: scale(0.98);
     }
     div[data-baseweb="input"], div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
@@ -249,6 +332,8 @@ elif st.session_state.page == "portfolio":
     """
     st.markdown(theme_css, unsafe_allow_html=True)
 
+    render_global_ticker()
+
     rates = fetch_exchange_rates()
 
     nav_col1, nav_col2, nav_col3 = st.columns([1.5, 3.5, 3])
@@ -265,18 +350,18 @@ elif st.session_state.page == "portfolio":
             st.rerun()
 
     st.markdown("## 💼 全球投資持股庫")
-    st.caption("支援本地自動存檔、匯率統一折算、停損利警示與資產佔比圓餅圖。")
+    st.caption("支援全球即時大盤、自選名單、組合歷史淨值曲線、多幣別折算與停損利監控。")
 
-    # 幣別折算開關
     c_curr1, c_curr2 = st.columns([3, 1])
     with c_curr2:
         currency_mode = st.radio("計價貨幣基準", ["原始各國幣別", "全部折合新台幣 (TWD)"], horizontal=True)
 
-    # 預先抓取所有持股即時現價與資訊
     portfolio_data = []
     total_market_val_calc = 0.0
     total_cost_val_calc = 0.0
     today_total_change_calc = 0.0
+
+    hist_series_dict = {}
 
     for item in st.session_state.my_portfolio:
         sym = item["symbol"]
@@ -286,7 +371,6 @@ elif st.session_state.page == "portfolio":
         stop_loss = item.get("stop_loss", -10.0)
         take_profit = item.get("take_profit", 20.0)
 
-        # 匯率換算率
         if mkt == "美股":
             fx_rate = rates["USD"]
             currency_symbol = "$"
@@ -298,10 +382,12 @@ elif st.session_state.page == "portfolio":
             currency_symbol = "NT$"
 
         try:
-            df, info = fetch_stock_full_data(sym)
+            df, info, _ = fetch_stock_full_data(sym)
             curr_price = df["Close"].iloc[-1] if not df.empty else cost
             prev_close = df["Close"].iloc[-2] if len(df) > 1 else curr_price
             div_yield = info.get("dividendYield", 0) or 0
+            if not df.empty:
+                hist_series_dict[sym] = df["Close"].tail(252) * shares * fx_rate
         except Exception:
             curr_price, prev_close = cost, cost
             div_yield = 0
@@ -312,7 +398,6 @@ elif st.session_state.page == "portfolio":
         diff_pct = (diff / cost_sub) * 100 if cost_sub > 0 else 0
         day_diff = (curr_price - prev_close) * shares
 
-        # 依選擇模式累計總資產
         multiplier = fx_rate if currency_mode == "全部折合新台幣 (TWD)" else 1.0
         total_market_val_calc += (mkt_sub * multiplier)
         total_cost_val_calc += (cost_sub * multiplier)
@@ -337,17 +422,10 @@ elif st.session_state.page == "portfolio":
             "mkt_sub_twd": mkt_sub * fx_rate
         })
 
-    # ==========================================
-    # 【新增】：資產配置視覺化圓餅圖（Donut Chart）
-    # ==========================================
-    # ==========================================
-    # 【優化版】：資產配置視覺化圓餅圖（清晰深色字體 + 置中總額）
-    # ==========================================
+    # 優化版甜甜圈圖
     if portfolio_data:
         with st.expander("📊 查看資產配置甜甜圈圖（市場與個股權重）", expanded=True):
             col_pie1, col_pie2 = st.columns(2)
-            
-            # 手繪米色風格專屬配色盤
             custom_colors = ['#556B5D', '#8C9A8E', '#C3B091', '#8E735B', '#4A6572', '#D99B82']
             total_twd_display = sum(p["mkt_sub_twd"] for p in portfolio_data)
 
@@ -361,27 +439,15 @@ elif st.session_state.page == "portfolio":
                     textfont=dict(color="#FFFFFF", size=12),
                     marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
-                
-                # 甜甜圈中央放置資產文字
                 fig_pie_mkt.add_annotation(
                     text=f"<b>總資產</b><br><span style='font-size:11px;'>NT${total_twd_display:,.0f}</span>",
                     x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
                 )
-
                 fig_pie_mkt.update_layout(
                     title=dict(text="<b>🌍 市場資產分佈 (折合台幣)</b>", font=dict(color="#2F3E34", size=14)),
-                    paper_bgcolor="#F7F4EA",
-                    plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=40),
-                    height=320,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.2,
-                        xanchor="center",
-                        x=0.5,
-                        font=dict(color="#2F3E34", size=11)
-                    )
+                    paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
+                    margin=dict(l=10, r=10, t=40, b=40), height=320,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#2F3E34", size=11))
                 )
                 st.plotly_chart(fig_pie_mkt, use_container_width=True, config={'displayModeBar': False})
 
@@ -395,36 +461,24 @@ elif st.session_state.page == "portfolio":
                     textfont=dict(color="#FFFFFF", size=12),
                     marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
-                
                 fig_pie_sym.add_annotation(
                     text=f"<b>{len(portfolio_data)} 檔</b><br><span style='font-size:11px;'>持股標的</span>",
                     x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
                 )
-
                 fig_pie_sym.update_layout(
                     title=dict(text="<b>📌 各持股比重配置</b>", font=dict(color="#2F3E34", size=14)),
-                    paper_bgcolor="#F7F4EA",
-                    plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=40),
-                    height=320,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.2,
-                        xanchor="center",
-                        x=0.5,
-                        font=dict(color="#2F3E34", size=11)
-                    )
+                    paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
+                    margin=dict(l=10, r=10, t=40, b=40), height=320,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#2F3E34", size=11))
                 )
                 st.plotly_chart(fig_pie_sym, use_container_width=True, config={'displayModeBar': False})
 
-
-    # 持股庫進階分析與加碼試算
+    # 進階分析、加碼試算與歷史淨值走勢
     if st.session_state.show_portfolio_analyzer and portfolio_data:
         st.markdown('<div class="analyzer-card">', unsafe_allow_html=True)
-        st.markdown("### 🧮 投資報酬率量化模型與新資金加碼建議")
+        st.markdown("### 🧮 投資組合進階量化、資產成長曲線與加碼")
         
-        tab_calc1, tab_calc2 = st.tabs(["📊 報酬率公式分析", "💰 現有資金最佳加碼做法"])
+        tab_calc1, tab_calc2, tab_equity = st.tabs(["📊 報酬率公式分析", "💰 現有資金最佳加碼做法", "📈 組合歷史淨值成長曲線"])
 
         with tab_calc1:
             formula_choice = st.selectbox(
@@ -476,7 +530,6 @@ elif st.session_state.page == "portfolio":
                 tot_diff = total_market_val_calc - total_cost_val_calc
                 tot_roi = (tot_diff / total_cost_val_calc) * 100 if total_cost_val_calc > 0 else 0
                 sharpe = (tot_roi - rf_rate) / st_dev if st_dev > 0 else 0
-
                 eval_text = "表現優異，承擔每單位風險能換取良好超額收益！" if sharpe > 1.0 else ("表現尚可，符合基準。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
                 st.metric("整體夏普比率 (Sharpe Ratio)", f"{sharpe:.2f}")
                 st.caption(f"評估結論：{eval_text}")
@@ -527,64 +580,110 @@ elif st.session_state.page == "portfolio":
                     "建議買進股數": f"{suggest_shares:,} 股",
                     "預計支出(台幣)": f"${actual_spent_twd:,.0f}"
                 })
-
             st.dataframe(pd.DataFrame(advice_list), use_container_width=True)
+
+        with tab_equity:
+            st.markdown("#### 📈 投資組合一年期總市值成長走勢（折合台幣）")
+            if hist_series_dict:
+                comb_df = pd.DataFrame(hist_series_dict).dropna()
+                if not comb_df.empty:
+                    comb_df["Total_Portfolio_TWD"] = comb_df.sum(axis=1)
+                    eq_fig = go.Figure()
+                    eq_fig.add_trace(go.Scatter(
+                        x=comb_df.index, y=comb_df["Total_Portfolio_TWD"],
+                        mode='lines', name='組合總市值',
+                        line=dict(color='#556B5D', width=2.5),
+                        fill='tozeroy', fillcolor='rgba(85, 107, 93, 0.08)'
+                    ))
+                    eq_fig.update_layout(
+                        paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
+                        margin=dict(l=10, r=10, t=15, b=10), height=320,
+                        hovermode="x unified", dragmode="pan",
+                        xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
+                        yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", title="NT$ 總淨值")
+                    )
+                    st.plotly_chart(eq_fig, use_container_width=True, config={'displayModeBar': False})
+                else:
+                    st.info("資料天數不足以合成歷史曲線。")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 1. 新增股票面板（含停損/停利設定）
-    with st.expander("➕ 新增股票到持股庫", expanded=False):
-        c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
-        with c_sym:
-            new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 7203.T)", key="input_add_sym").strip().upper()
-        with c_mkt_select:
-            known_markets = list(st.session_state.market_rules.keys())
-            auto_idx = known_markets.index(detect_market(new_sym)) if detect_market(new_sym) in known_markets else 0
-            market_options = known_markets + ["➕ 自訂其他國家/市場..."]
-            chosen_market = st.selectbox("市場國別", market_options, index=auto_idx)
-        with c_shares:
-            new_shares = st.number_input("持有股數", min_value=1.0, value=100.0, step=1.0)
-        with c_cost:
-            new_cost = st.number_input("買入平均成本", min_value=0.01, value=100.0, step=1.0)
+    # 觀察名單與新增持股
+    c_action1, c_action2 = st.columns([1, 1])
+    with c_action1:
+        with st.expander("➕ 新增股票到持股庫", expanded=False):
+            c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
+            with c_sym:
+                new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 7203.T)", key="input_add_sym").strip().upper()
+            with c_mkt_select:
+                known_markets = list(st.session_state.market_rules.keys())
+                auto_idx = known_markets.index(detect_market(new_sym)) if detect_market(new_sym) in known_markets else 0
+                chosen_market = st.selectbox("市場國別", known_markets + ["➕ 自訂其他國家/市場..."], index=auto_idx)
+            with c_shares:
+                new_shares = st.number_input("持有股數", min_value=1.0, value=100.0, step=1.0)
+            with c_cost:
+                new_cost = st.number_input("買入平均成本", min_value=0.01, value=100.0, step=1.0)
 
-        c_sl, c_tp = st.columns(2)
-        with c_sl:
-            new_sl = st.number_input("停損警示百分比 (%)", value=-10.0, step=1.0)
-        with c_tp:
-            new_tp = st.number_input("停利/目標價百分比 (%)", value=20.0, step=1.0)
+            c_sl, c_tp = st.columns(2)
+            with c_sl:
+                new_sl = st.number_input("停損警示百分比 (%)", value=-10.0, step=1.0)
+            with c_tp:
+                new_tp = st.number_input("停利/目標價百分比 (%)", value=20.0, step=1.0)
 
-        final_market = chosen_market
-        if chosen_market == "➕ 自訂其他國家/市場...":
-            c_custom1, c_custom2 = st.columns(2)
-            with c_custom1:
-                custom_name = st.text_input("輸入市場名稱 (例如：韓股、英股)", value="其他市場").strip()
-                final_market = custom_name
-            with c_custom2:
-                custom_color_rule = st.radio("漲跌顏色偏好：", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
-                st.session_state.market_rules[custom_name] = custom_color_rule
+            final_market = chosen_market
+            if chosen_market == "➕ 自訂其他國家/市場...":
+                c_c1, c_c2 = st.columns(2)
+                with c_c1:
+                    final_market = st.text_input("輸入市場名稱", value="其他市場").strip()
+                with c_c2:
+                    st.session_state.market_rules[final_market] = st.radio("漲跌顏色", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
 
-        st.write("")
-        if st.button("確認加入持股庫", use_container_width=True):
-            if new_sym:
-                new_entry = {
-                    "symbol": new_sym,
-                    "market": final_market,
-                    "shares": new_shares,
-                    "cost": new_cost,
-                    "stop_loss": new_sl,
-                    "take_profit": new_tp
-                }
-                st.session_state.my_portfolio.append(new_entry)
-                save_portfolio_data(st.session_state.my_portfolio)
-                st.success(f"已成功加入並存檔 [{final_market}] {new_sym}！")
-                st.rerun()
+            if st.button("確認加入持股庫", use_container_width=True):
+                if new_sym:
+                    new_entry = {
+                        "symbol": new_sym, "market": final_market, "shares": new_shares,
+                        "cost": new_cost, "stop_loss": new_sl, "take_profit": new_tp
+                    }
+                    st.session_state.my_portfolio.append(new_entry)
+                    save_portfolio_data(st.session_state.my_portfolio)
+                    st.success(f"已成功加入 [{final_market}] {new_sym}！")
+                    st.rerun()
+
+    with c_action2:
+        with st.expander("👀 觀察自選名單 (Watchlist)", expanded=False):
+            w_in, w_btn = st.columns([3, 1])
+            with w_in:
+                add_w_sym = st.text_input("輸入想觀察的股票代號：", key="input_watch_sym").strip().upper()
+            with w_btn:
+                st.write("")
+                if st.button("➕ 加入自選", use_container_width=True):
+                    if add_w_sym and add_w_sym not in st.session_state.my_watchlist:
+                        st.session_state.my_watchlist.append(add_w_sym)
+                        save_watchlist_data(st.session_state.my_watchlist)
+                        st.rerun()
+
+            if st.session_state.my_watchlist:
+                for w_sym in st.session_state.my_watchlist:
+                    wc1, wc2, wc3 = st.columns([3, 1.5, 1])
+                    with wc1:
+                        st.write(f"📌 **{w_sym}** ({detect_market(w_sym)})")
+                    with wc2:
+                        if st.button("看盤", key=f"btn_w_{w_sym}", use_container_width=True):
+                            st.session_state.active_ticker = w_sym
+                            st.session_state.page = "dashboard"
+                            st.query_params["page"] = "dashboard"
+                            st.rerun()
+                    with wc3:
+                        if st.button("🗑️", key=f"del_w_{w_sym}"):
+                            st.session_state.my_watchlist.remove(w_sym)
+                            save_watchlist_data(st.session_state.my_watchlist)
+                            st.rerun()
 
     st.write("")
 
-    # 2. 依國家分類分頁檢視
+    # 持股分類清單檢視
     all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
-    tab_list = ["🌐 全部持股"] + [f"📍 {m}" for m in all_markets]
-    tabs = st.tabs(tab_list)
+    tabs = st.tabs(["🌐 全部持股"] + [f"📍 {m}" for m in all_markets])
 
     for i, current_tab in enumerate(tabs):
         with current_tab:
@@ -617,8 +716,6 @@ elif st.session_state.page == "portfolio":
                     curr_s = p["curr_sym"]
 
                     profit_color = get_market_color(mkt, is_up=(diff >= 0))
-
-                    # 停損/停利警示標籤
                     alert_html = ""
                     if diff_pct <= p["stop_loss"]:
                         alert_html = f"<div class='alert-tag alert-loss'>⚠️ 觸發停損 ({diff_pct:.1f}%)</div>"
@@ -648,7 +745,6 @@ elif st.session_state.page == "portfolio":
 
                 st.divider()
 
-    # 底部總覽與匯出按鈕
     tot_diff = total_market_val_calc - total_cost_val_calc
     tot_pct = (tot_diff / total_cost_val_calc) * 100 if total_cost_val_calc > 0 else 0
     prefix = "NT$ " if currency_mode == "全部折合新台幣 (TWD)" else ""
@@ -659,9 +755,6 @@ elif st.session_state.page == "portfolio":
     m3.metric("累積未實現損益", f"{prefix}{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
     m4.metric("今日單日總波動", f"{prefix}{today_total_change_calc:+,.2f}")
 
-    # ==========================================
-    # 【新增】：一鍵匯出 CSV 報表
-    # ==========================================
     if portfolio_data:
         csv_df = pd.DataFrame(portfolio_data)[[
             "symbol", "market", "shares", "cost", "price", "diff", "diff_pct", "stop_loss", "take_profit"
@@ -687,9 +780,22 @@ elif st.session_state.page == "dashboard":
         background-color: #F7F4EA !important;
         color: #2F3E34 !important;
     }
+    /* 全域滑順進場過渡動畫 */
     .block-container {
-        padding: 2rem 2.5rem !important;
+        padding: 1.5rem 2.5rem !important;
         max-width: 1250px !important;
+        animation: pageSlideFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: transform, opacity;
+    }
+    @keyframes pageSlideFade {
+        0% {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -706,10 +812,14 @@ elif st.session_state.page == "dashboard":
         border: 1.5px solid #738A7A !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
+        transition: background-color 0.2s ease, transform 0.1s ease !important;
     }
     div[data-testid="stButton"] > button:hover {
         background-color: #738A7A !important;
         color: #F7F4EA !important;
+    }
+    div[data-testid="stButton"] > button:active {
+        transform: scale(0.98);
     }
     div[data-baseweb="input"], div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
@@ -747,36 +857,40 @@ elif st.session_state.page == "dashboard":
         to { opacity: 1; }
     }
 
-    .chart-3d-stage {
-        perspective: 1200px;
+    /* 輕量平滑圖表容器（移除吃效能的 blur 濾鏡） */
+    .chart-stage-container {
         width: 100%;
         background-color: #F7F4EA;
-        border-radius: 14px;
-        overflow: hidden;
+        border-radius: 12px;
+        animation: subtlePop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        will-change: transform, opacity;
     }
-    .chart-forward-anim {
-        animation: zoomForwardPop 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
-        transform-origin: center center;
-    }
-    @keyframes zoomForwardPop {
+    @keyframes subtlePop {
         0% {
             opacity: 0;
-            transform: scale(0.88) translateZ(-60px);
-            filter: blur(8px);
-        }
-        50% {
-            opacity: 0.85;
-            filter: blur(1.5px);
+            transform: scale(0.98);
         }
         100% {
             opacity: 1;
-            transform: scale(1.0) translateZ(0);
-            filter: blur(0px);
+            transform: scale(1.0);
         }
+    }
+    .news-card {
+        background-color: #EFEADB;
+        border: 1px solid #D8D2C0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        transition: transform 0.15s ease;
+    }
+    .news-card:hover {
+        transform: translateX(4px);
     }
     </style>
     """
     st.markdown(dash_css, unsafe_allow_html=True)
+
+    render_global_ticker()
 
     col_nav1, col_nav2, _ = st.columns([1.5, 1.5, 5])
     with col_nav1:
@@ -818,7 +932,7 @@ elif st.session_state.page == "dashboard":
     """, unsafe_allow_html=True)
 
     try:
-        full_df, info = fetch_stock_full_data(current_ticker)
+        full_df, info, news_items = fetch_stock_full_data(current_ticker)
         loader_placeholder.empty()
 
         if not full_df.empty:
@@ -850,9 +964,8 @@ elif st.session_state.page == "dashboard":
 
             st.markdown("---")
 
-            # 5 大功能分頁（包含定期定額 DCA 試算）
-            tab_chart, tab_benchmark, tab_dca, tab_data, tab_info = st.tabs([
-                "📈 動態走勢與技術線", "🌐 大盤基準對比 (Alpha)", "📅 定期定額試算 (DCA)", "📋 歷史明細", "🏢 公司財務與基本面"
+            tab_chart, tab_benchmark, tab_dca, tab_news, tab_data, tab_info = st.tabs([
+                "📈 動態走勢與技術線", "🌐 大盤基準對比 (Alpha)", "📅 定期定額試算 (DCA)", "📰 重大即時新聞", "📋 歷史明細", "🏢 公司財務與基本面"
             ])
 
             with tab_chart:
@@ -896,20 +1009,16 @@ elif st.session_state.page == "dashboard":
                 has_vol = "顯示成交量副圖" in show_indicators
 
                 if has_rsi and has_vol:
-                    rows = 3
-                    row_heights = [0.60, 0.20, 0.20]
+                    rows, row_heights = 3, [0.60, 0.20, 0.20]
                     vol_row, rsi_row = 2, 3
                 elif has_vol:
-                    rows = 2
-                    row_heights = [0.75, 0.25]
+                    rows, row_heights = 2, [0.75, 0.25]
                     vol_row, rsi_row = 2, None
                 elif has_rsi:
-                    rows = 2
-                    row_heights = [0.75, 0.25]
+                    rows, row_heights = 2, [0.75, 0.25]
                     vol_row, rsi_row = None, 2
                 else:
-                    rows = 1
-                    row_heights = [1.0]
+                    rows, row_heights = 1, [1.0]
                     vol_row, rsi_row = None, None
 
                 fig = make_subplots(
@@ -933,9 +1042,7 @@ elif st.session_state.page == "dashboard":
                         x=plot_data.index,
                         open=plot_data['Open'], high=plot_data['High'],
                         low=plot_data['Low'], close=plot_data['Close'],
-                        increasing_line_color=up_c,
-                        decreasing_line_color=dn_c,
-                        name='K 線'
+                        increasing_line_color=up_c, decreasing_line_color=dn_c, name='K 線'
                     ), row=1, col=1)
 
                 if "MA20" in plot_data:
@@ -944,14 +1051,8 @@ elif st.session_state.page == "dashboard":
                     fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA60"], mode='lines', name='MA60 (季線)', line=dict(color='#8E44AD', width=1.5)), row=1, col=1)
 
                 if has_vol:
-                    vol_colors = [
-                        (theme_color if r["Close"] >= r["Open"] else "#9E9E9E")
-                        for _, r in plot_data.iterrows()
-                    ]
-                    fig.add_trace(go.Bar(
-                        x=plot_data.index, y=plot_data["Volume"],
-                        name="成交量", marker_color=vol_colors, opacity=0.7
-                    ), row=vol_row, col=1)
+                    vol_colors = [(theme_color if r["Close"] >= r["Open"] else "#9E9E9E") for _, r in plot_data.iterrows()]
+                    fig.add_trace(go.Bar(x=plot_data.index, y=plot_data["Volume"], name="成交量", marker_color=vol_colors, opacity=0.7), row=vol_row, col=1)
 
                 if has_rsi:
                     fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["RSI"], mode='lines', name='RSI(14)', line=dict(color='#2980B9', width=1.8)), row=rsi_row, col=1)
@@ -959,37 +1060,22 @@ elif st.session_state.page == "dashboard":
                     fig.add_hline(y=30, line_dash="dash", line_color="#27AE60", row=rsi_row, col=1)
 
                 fig.update_layout(
-                    paper_bgcolor="#F7F4EA",
-                    plot_bgcolor="#F7F4EA",
+                    paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
                     margin=dict(l=10, r=10, t=15, b=10),
                     height=550 if rows > 1 else 490,
-                    hovermode="x unified",
-                    dragmode="pan",
-                    xaxis=dict(
-                        showgrid=True,
-                        gridcolor="#E3DEC8",
-                        color="#2F3E34",
-                        range=[init_start, latest_date],
-                        rangeslider=dict(visible=False),
-                        type="date"
-                    ),
+                    hovermode="x unified", dragmode="pan",
+                    xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", range=[init_start, latest_date], rangeslider=dict(visible=False), type="date"),
                     yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", autorange=True, fixedrange=False)
                 )
 
-                st.markdown('<div class="chart-3d-stage"><div class="chart-forward-anim">', unsafe_allow_html=True)
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                    config={'scrollZoom': True, 'displayModeBar': False, 'showTips': False}
-                )
-                st.markdown('</div></div>', unsafe_allow_html=True)
+                st.markdown('<div class="chart-stage-container">', unsafe_allow_html=True)
+                st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False, 'showTips': False})
+                st.markdown('</div>', unsafe_allow_html=True)
                 st.caption("💡 提示：在 iPad 上可用 **雙指捏合縮放** 任意平移與展開歷史走勢。")
 
             with tab_benchmark:
                 bm_symbol, bm_name = get_market_benchmark(market_type)
                 st.markdown(f"#### 🌐 {company_name} 對比市場大盤基準（{bm_name}）")
-                st.caption("將股票歷史收盤價與基準指數標準化為百分比報酬率，檢視是否跑贏大盤。")
-
                 bm_period = st.selectbox("對比時間長度：", ["最近 3 個月", "最近 6 個月", "最近 1 年", "最近 3 年"], index=2)
                 bm_days_map = {"最近 3 個月": 90, "最近 6 個月": 180, "最近 1 年": 365, "最近 3 年": 365*3}
                 bm_start = datetime.now() - timedelta(days=bm_days_map[bm_period])
@@ -1003,47 +1089,28 @@ elif st.session_state.page == "dashboard":
                         if len(common_idx) > 5:
                             s_close = stk_bm_df.loc[common_idx, "Close"]
                             b_close = bm_df.loc[common_idx, "Close"]
-
                             s_return = ((s_close / s_close.iloc[0]) - 1.0) * 100
                             b_return = ((b_close / b_close.iloc[0]) - 1.0) * 100
                             alpha = s_return.iloc[-1] - b_return.iloc[-1]
 
                             bm_fig = go.Figure()
-                            bm_fig.add_trace(go.Scatter(
-                                x=common_idx, y=s_return, mode='lines', name=f"{current_ticker} 報酬率 (%)",
-                                line=dict(color='#2E7D32' if alpha >= 0 else '#E53935', width=2.5)
-                            ))
-                            bm_fig.add_trace(go.Scatter(
-                                x=common_idx, y=b_return, mode='lines', name=f"{bm_name} 報酬率 (%)",
-                                line=dict(color='#7F8C8D', width=2, dash='dot')
-                            ))
-
+                            bm_fig.add_trace(go.Scatter(x=common_idx, y=s_return, mode='lines', name=f"{current_ticker} 報酬率 (%)", line=dict(color='#2E7D32' if alpha >= 0 else '#E53935', width=2.5)))
+                            bm_fig.add_trace(go.Scatter(x=common_idx, y=b_return, mode='lines', name=f"{bm_name} 報酬率 (%)", line=dict(color='#7F8C8D', width=2, dash='dot')))
                             bm_fig.update_layout(
                                 paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                                margin=dict(l=10, r=10, t=15, b=10),
-                                height=450, hovermode="x unified", dragmode="pan",
+                                margin=dict(l=10, r=10, t=15, b=10), height=450,
+                                hovermode="x unified", dragmode="pan",
                                 xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
                                 yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", title="累積報酬率 (%)")
                             )
-
                             b_c1, b_c2, b_c3 = st.columns(3)
                             b_c1.metric(f"{current_ticker} 累積報酬", f"{s_return.iloc[-1]:+.2f}%")
                             b_c2.metric(f"{bm_name} 累積報酬", f"{b_return.iloc[-1]:+.2f}%")
                             b_c3.metric("超額報酬 (Alpha)", f"{alpha:+.2f}%")
-
                             st.plotly_chart(bm_fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
-                        else:
-                            st.warning("基準對比資料重疊天數不足，請嘗試切換較長區間。")
-                    else:
-                        st.error("大盤基準資料讀取失敗。")
 
-            # ==========================================
-            # 【新增】：定期定額 DCA 歷史回測模擬器
-            # ==========================================
             with tab_dca:
                 st.markdown(f"#### 📅 定期定額 (DCA) 投資成果回測")
-                st.caption(f"模擬在過去這段時間，每月固定投資 {current_ticker} 的累積複利成果。")
-
                 c_dca1, c_dca2 = st.columns(2)
                 with c_dca1:
                     monthly_amount = st.number_input("每月固定投入金額 ($)：", min_value=100.0, value=5000.0, step=500.0)
@@ -1054,24 +1121,14 @@ elif st.session_state.page == "dashboard":
                 dca_df = full_df[full_df.index >= pd.to_datetime(dca_start).tz_localize(full_df.index.tz)]
 
                 if not dca_df.empty:
-                    # 每月第一個交易日定額買入
                     monthly_df = dca_df.resample('MS').first()
-                    total_invested = 0.0
-                    total_shares = 0.0
-
-                    dca_timeline = []
+                    total_invested, total_shares, dca_timeline = 0.0, 0.0, []
                     for date, row in monthly_df.iterrows():
                         p = row["Close"]
                         if p > 0:
-                            bought = monthly_amount / p
-                            total_shares += bought
+                            total_shares += (monthly_amount / p)
                             total_invested += monthly_amount
-                            current_val = total_shares * p
-                            dca_timeline.append({
-                                "date": date,
-                                "invested": total_invested,
-                                "val": current_val
-                            })
+                            dca_timeline.append({"date": date, "invested": total_invested, "val": total_shares * p})
 
                     if dca_timeline:
                         final_val = total_shares * latest_close
@@ -1089,12 +1146,30 @@ elif st.session_state.page == "dashboard":
                         fig_dca.add_trace(go.Scatter(x=timeline_df["date"], y=timeline_df["invested"], mode='lines', name='累積本金', line=dict(color='#7F8C8D', width=2, dash='dot')))
                         fig_dca.update_layout(
                             paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                            margin=dict(l=10, r=10, t=15, b=10),
-                            height=350, hovermode="x unified",
+                            margin=dict(l=10, r=10, t=15, b=10), height=350, hovermode="x unified",
                             xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
                             yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
                         )
                         st.plotly_chart(fig_dca, use_container_width=True)
+
+            with tab_news:
+                st.markdown(f"#### 📰 {company_name} 最近重大即時新聞")
+                if news_items:
+                    for news in news_items[:6]:
+                        title = news.get("title", "無標題")
+                        publisher = news.get("publisher", "未知媒體")
+                        link = news.get("link", "#")
+                        pub_time = news.get("providerPublishTime", None)
+                        time_str = datetime.fromtimestamp(pub_time).strftime("%Y-%m-%d %H:%M") if pub_time else ""
+
+                        st.markdown(f"""
+                        <div class="news-card">
+                            <a href="{link}" target="_blank" style="text-decoration:none; color:#2F3E34; font-weight:bold; font-size:1.05rem;">{title}</a>
+                            <div style="font-size:0.8rem; color:#738A7A; margin-top:4px;">來源：{publisher} | 發布時間：{time_str}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("目前無即時新聞資料。")
 
             with tab_data:
                 st.caption("最近 30 個交易日資料明細")
@@ -1118,7 +1193,6 @@ elif st.session_state.page == "dashboard":
                     st.write(f"**營業利益率：** {info.get('operatingMargins', 0)*100:.2f}%" if info.get('operatingMargins') else "**營業利益率：** N/A")
                     st.write(f"**毛利率：** {info.get('grossMargins', 0)*100:.2f}%" if info.get('grossMargins') else "**毛利率：** N/A")
                     st.write(f"**目標中位價：** {info.get('targetMedianPrice', 'N/A')}")
-
                 st.markdown("#### 業務概況")
                 st.write(info.get("longBusinessSummary", "暫無簡介資料。"))
 
