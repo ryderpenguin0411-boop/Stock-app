@@ -19,7 +19,7 @@ st.set_page_config(
 DATA_FILE = "portfolio.json"
 WATCHLIST_FILE = "watchlist.json"
 
-# 2. 本地資料持久化存取函式
+# 2. 本地持久化資料存取
 def load_portfolio_data():
     default_data = [
         {"symbol": "2330.TW", "market": "台股", "shares": 100, "cost": 950.0, "stop_loss": -10.0, "take_profit": 20.0},
@@ -172,10 +172,10 @@ def render_global_ticker():
             color = "#E53935" if it["diff"] > 0 else ("#2E7D32" if it["diff"] < 0 else "#7F8C8D")
             with col:
                 st.markdown(f"""
-                <div style="background:#EFEADB; padding:6px 12px; border-radius:8px; border:1px solid #D8D2C0; text-align:center;">
-                    <span style="font-size:0.8rem; color:#556B5D; font-weight:bold;">{it['name']}</span><br>
-                    <span style="font-size:0.95rem; font-weight:bold; color:#2F3E34;">{it['price']:,.2f}</span>
-                    <span style="font-size:0.8rem; color:{color}; font-weight:bold;">({it['pct']:+.2f}%)</span>
+                <div style="background:#EFEADB; padding:5px 10px; border-radius:8px; border:1px solid #D8D2C0; text-align:center;">
+                    <span style="font-size:0.75rem; color:#556B5D; font-weight:bold;">{it['name']}</span><br>
+                    <span style="font-size:0.9rem; font-weight:bold; color:#2F3E34;">{it['price']:,.2f}</span>
+                    <span style="font-size:0.75rem; color:{color}; font-weight:bold;">({it['pct']:+.2f}%)</span>
                 </div>
                 """, unsafe_allow_html=True)
         st.write("")
@@ -194,15 +194,12 @@ if st.session_state.page == "welcome":
 
     welcome_css = f"""
     <style>
+    html, body, [data-testid="stAppViewContainer"], .stApp {{
+        background-color: #F7F4EA !important;
+    }}
     #MainMenu, header, footer, div[data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
-    }}
-    .stApp {{
-        margin: 0 !important;
-        padding: 0 !important;
-        background-color: #F7F4EA !important;
-        overflow: hidden !important;
     }}
     .block-container {{
         padding: 0 !important;
@@ -210,11 +207,6 @@ if st.session_state.page == "welcome":
         max-width: 100vw !important;
         width: 100vw !important;
         height: 100vh !important;
-        animation: pageFadeIn 0.45s ease-out forwards;
-    }}
-    @keyframes pageFadeIn {{
-        0% {{ opacity: 0; }}
-        100% {{ opacity: 1; }}
     }}
     .splash-container {{
         position: relative;
@@ -261,27 +253,14 @@ if st.session_state.page == "welcome":
 elif st.session_state.page == "portfolio":
     theme_css = """
     <style>
-    #MainMenu, header, footer, div[data-testid="stDecoration"] { visibility: hidden !important; }
-    .stApp {
+    html, body, [data-testid="stAppViewContainer"], .stApp {
         background-color: #F7F4EA !important;
         color: #2F3E34 !important;
     }
-    /* 全域滑順進場過渡動畫 */
+    #MainMenu, header, footer, div[data-testid="stDecoration"] { visibility: hidden !important; }
     .block-container {
-        padding: 1.5rem 2.5rem !important;
-        max-width: 1250px !important;
-        animation: pageSlideFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        will-change: transform, opacity;
-    }
-    @keyframes pageSlideFade {
-        0% {
-            opacity: 0;
-            transform: translateY(8px);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        padding: 1rem 2rem !important;
+        max-width: 1350px !important;
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -289,8 +268,8 @@ elif st.session_state.page == "portfolio":
     div[data-testid="stMetric"] {
         background-color: #EFEADB !important;
         border: 1px solid #D8D2C0 !important;
-        border-radius: 12px !important;
-        padding: 12px 18px !important;
+        border-radius: 10px !important;
+        padding: 8px 14px !important;
     }
     div[data-testid="stButton"] > button {
         background-color: #E6E0CE !important;
@@ -298,33 +277,24 @@ elif st.session_state.page == "portfolio":
         border: 1.5px solid #738A7A !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
-        transition: background-color 0.2s ease, transform 0.1s ease !important;
     }
     div[data-testid="stButton"] > button:hover {
         background-color: #738A7A !important;
         color: #F7F4EA !important;
     }
-    div[data-testid="stButton"] > button:active {
-        transform: scale(0.98);
-    }
-    div[data-baseweb="input"], div[data-baseweb="select"] {
-        background-color: #FFFFFF !important;
-        border-radius: 8px !important;
-    }
     .analyzer-card {
         background-color: #EFEADB;
         border: 1.5px solid #738A7A;
         border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
+        padding: 1.2rem;
+        margin-bottom: 1.2rem;
     }
     .alert-tag {
         display: inline-block;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 0.8rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.75rem;
         font-weight: bold;
-        margin-top: 4px;
     }
     .alert-profit { background-color: #E8F5E9; color: #2E7D32; border: 1px solid #A5D6A7; }
     .alert-loss { background-color: #FFEBEE; color: #C62828; border: 1px solid #EF9A9A; }
@@ -333,7 +303,6 @@ elif st.session_state.page == "portfolio":
     st.markdown(theme_css, unsafe_allow_html=True)
 
     render_global_ticker()
-
     rates = fetch_exchange_rates()
 
     nav_col1, nav_col2, nav_col3 = st.columns([1.5, 3.5, 3])
@@ -344,23 +313,21 @@ elif st.session_state.page == "portfolio":
             st.rerun()
 
     with nav_col3:
-        btn_text = "❌ 關閉分析與試算" if st.session_state.show_portfolio_analyzer else "🧮 投資組合進階分析與加碼"
+        btn_text = "❌ 關閉量化試算" if st.session_state.show_portfolio_analyzer else "🧮 投資組合進階分析與加碼"
         if st.button(btn_text, use_container_width=True):
             st.session_state.show_portfolio_analyzer = not st.session_state.show_portfolio_analyzer
             st.rerun()
 
     st.markdown("## 💼 全球投資持股庫")
-    st.caption("支援全球即時大盤、自選名單、組合歷史淨值曲線、多幣別折算與停損利監控。")
 
-    c_curr1, c_curr2 = st.columns([3, 1])
+    c_curr1, c_curr2 = st.columns([3, 1.2])
     with c_curr2:
-        currency_mode = st.radio("計價貨幣基準", ["原始各國幣別", "全部折合新台幣 (TWD)"], horizontal=True)
+        currency_mode = st.radio("計價基準：", ["原始各國幣別", "全部折合新台幣 (TWD)"], horizontal=True)
 
     portfolio_data = []
     total_market_val_calc = 0.0
     total_cost_val_calc = 0.0
     today_total_change_calc = 0.0
-
     hist_series_dict = {}
 
     for item in st.session_state.my_portfolio:
@@ -422,7 +389,7 @@ elif st.session_state.page == "portfolio":
             "mkt_sub_twd": mkt_sub * fx_rate
         })
 
-    # 優化版甜甜圈圖
+    # 優化版甜甜圈圖（無重疊標籤）
     if portfolio_data:
         with st.expander("📊 查看資產配置甜甜圈圖（市場與個股權重）", expanded=True):
             col_pie1, col_pie2 = st.columns(2)
@@ -434,20 +401,21 @@ elif st.session_state.page == "portfolio":
                 fig_pie_mkt = go.Figure(data=[go.Pie(
                     labels=pie_mkt_df["market"],
                     values=pie_mkt_df["mkt_sub_twd"],
-                    hole=.55,
+                    hole=.6,
                     textinfo="label+percent",
-                    textfont=dict(color="#FFFFFF", size=12),
+                    textposition='inside',
+                    insidetextorientation='radial',
+                    textfont=dict(color="#FFFFFF", size=11),
                     marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
                 fig_pie_mkt.add_annotation(
                     text=f"<b>總資產</b><br><span style='font-size:11px;'>NT${total_twd_display:,.0f}</span>",
-                    x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
+                    x=0.5, y=0.5, font_size=12, font_color="#2F3E34", showarrow=False
                 )
                 fig_pie_mkt.update_layout(
-                    title=dict(text="<b>🌍 市場資產分佈 (折合台幣)</b>", font=dict(color="#2F3E34", size=14)),
+                    title=dict(text="<b>🌍 市場分佈 (折合台幣)</b>", font=dict(color="#2F3E34", size=13)),
                     paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=40), height=320,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#2F3E34", size=11))
+                    margin=dict(l=10, r=10, t=30, b=10), height=240, showlegend=False
                 )
                 st.plotly_chart(fig_pie_mkt, use_container_width=True, config={'displayModeBar': False})
 
@@ -456,28 +424,27 @@ elif st.session_state.page == "portfolio":
                 fig_pie_sym = go.Figure(data=[go.Pie(
                     labels=pie_sym_df["symbol"],
                     values=pie_sym_df["mkt_sub_twd"],
-                    hole=.55,
+                    hole=.6,
                     textinfo="label+percent",
-                    textfont=dict(color="#FFFFFF", size=12),
+                    textposition='inside',
+                    insidetextorientation='radial',
+                    textfont=dict(color="#FFFFFF", size=11),
                     marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
                 fig_pie_sym.add_annotation(
                     text=f"<b>{len(portfolio_data)} 檔</b><br><span style='font-size:11px;'>持股標的</span>",
-                    x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
+                    x=0.5, y=0.5, font_size=12, font_color="#2F3E34", showarrow=False
                 )
                 fig_pie_sym.update_layout(
-                    title=dict(text="<b>📌 各持股比重配置</b>", font=dict(color="#2F3E34", size=14)),
+                    title=dict(text="<b>📌 個股權重配置</b>", font=dict(color="#2F3E34", size=13)),
                     paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=40), height=320,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#2F3E34", size=11))
+                    margin=dict(l=10, r=10, t=30, b=10), height=240, showlegend=False
                 )
                 st.plotly_chart(fig_pie_sym, use_container_width=True, config={'displayModeBar': False})
 
-    # 進階分析、加碼試算與歷史淨值走勢
+    # 進階分析展開區塊
     if st.session_state.show_portfolio_analyzer and portfolio_data:
         st.markdown('<div class="analyzer-card">', unsafe_allow_html=True)
-        st.markdown("### 🧮 投資組合進階量化、資產成長曲線與加碼")
-        
         tab_calc1, tab_calc2, tab_equity = st.tabs(["📊 報酬率公式分析", "💰 現有資金最佳加碼做法", "📈 組合歷史淨值成長曲線"])
 
         with tab_calc1:
@@ -523,14 +490,14 @@ elif st.session_state.page == "portfolio":
                 st.write("**公式：** $\\text{Sharpe Ratio} = \\frac{R_p - R_f}{\\sigma_p}$")
                 c1, c2 = st.columns(2)
                 with c1:
-                    rf_rate = st.number_input("設定無風險利率 %（如美國公債利率）：", value=3.5, step=0.1)
+                    rf_rate = st.number_input("設定無風險利率 %：", value=3.5, step=0.1)
                 with c2:
-                    st_dev = st.number_input("預估年化波動度 (標準差) %：", value=18.0, step=0.5)
+                    st_dev = st.number_input("預估年化波動度 %：", value=18.0, step=0.5)
 
                 tot_diff = total_market_val_calc - total_cost_val_calc
                 tot_roi = (tot_diff / total_cost_val_calc) * 100 if total_cost_val_calc > 0 else 0
                 sharpe = (tot_roi - rf_rate) / st_dev if st_dev > 0 else 0
-                eval_text = "表現優異，承擔每單位風險能換取良好超額收益！" if sharpe > 1.0 else ("表現尚可，符合基準。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
+                eval_text = "表現優異，承擔每單位風險能換取良好超額收益！" if sharpe > 1.0 else ("表現尚可。" if sharpe > 0 else "目前收益尚未跑贏無風險資產。")
                 st.metric("整體夏普比率 (Sharpe Ratio)", f"{sharpe:.2f}")
                 st.caption(f"評估結論：{eval_text}")
 
@@ -542,11 +509,7 @@ elif st.session_state.page == "portfolio":
             with c_strategy:
                 strategy = st.selectbox(
                     "選擇加碼策略：",
-                    [
-                        "⚖️ 再平衡逢低加碼法（優先補貼跌幅較大或佔比偏低者）",
-                        "🚀 強勢順勢加碼法（優先加碼目前正報酬最高者）",
-                        "🌐 平均分散加碼法（平均將資金切成等分）"
-                    ]
+                    ["⚖️ 再平衡逢低加碼法", "🚀 強勢順勢加碼法", "🌐 平均分散加碼法"]
                 )
 
             weights = {}
@@ -575,7 +538,7 @@ elif st.session_state.page == "portfolio":
                     "股票代號": sym,
                     "市場": p["market"],
                     "目前現價": f"{p['curr_sym']}{p['price']:.2f}",
-                    "建議配置比例": f"{w*100:.1f}%",
+                    "配置比例": f"{w*100:.1f}%",
                     "分配資金(台幣)": f"${alloc_cash_twd:,.0f}",
                     "建議買進股數": f"{suggest_shares:,} 股",
                     "預計支出(台幣)": f"${actual_spent_twd:,.0f}"
@@ -597,28 +560,26 @@ elif st.session_state.page == "portfolio":
                     ))
                     eq_fig.update_layout(
                         paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                        margin=dict(l=10, r=10, t=15, b=10), height=320,
+                        margin=dict(l=10, r=10, t=15, b=10), height=300,
                         hovermode="x unified", dragmode="pan",
                         xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
                         yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", title="NT$ 總淨值")
                     )
                     st.plotly_chart(eq_fig, use_container_width=True, config={'displayModeBar': False})
-                else:
-                    st.info("資料天數不足以合成歷史曲線。")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 觀察名單與新增持股
+    # 快捷功能列
     c_action1, c_action2 = st.columns([1, 1])
     with c_action1:
         with st.expander("➕ 新增股票到持股庫", expanded=False):
             c_sym, c_mkt_select, c_shares, c_cost = st.columns([2, 2, 2, 2])
             with c_sym:
-                new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA / 7203.T)", key="input_add_sym").strip().upper()
+                new_sym = st.text_input("股票代號 (例: 2330.TW / NVDA)", key="input_add_sym").strip().upper()
             with c_mkt_select:
                 known_markets = list(st.session_state.market_rules.keys())
                 auto_idx = known_markets.index(detect_market(new_sym)) if detect_market(new_sym) in known_markets else 0
-                chosen_market = st.selectbox("市場國別", known_markets + ["➕ 自訂其他國家/市場..."], index=auto_idx)
+                chosen_market = st.selectbox("市場國別", known_markets + ["➕ 自訂市場..."], index=auto_idx)
             with c_shares:
                 new_shares = st.number_input("持有股數", min_value=1.0, value=100.0, step=1.0)
             with c_cost:
@@ -626,17 +587,13 @@ elif st.session_state.page == "portfolio":
 
             c_sl, c_tp = st.columns(2)
             with c_sl:
-                new_sl = st.number_input("停損警示百分比 (%)", value=-10.0, step=1.0)
+                new_sl = st.number_input("停損百分比 (%)", value=-10.0, step=1.0)
             with c_tp:
-                new_tp = st.number_input("停利/目標價百分比 (%)", value=20.0, step=1.0)
+                new_tp = st.number_input("停利百分比 (%)", value=20.0, step=1.0)
 
             final_market = chosen_market
-            if chosen_market == "➕ 自訂其他國家/市場...":
-                c_c1, c_c2 = st.columns(2)
-                with c_c1:
-                    final_market = st.text_input("輸入市場名稱", value="其他市場").strip()
-                with c_c2:
-                    st.session_state.market_rules[final_market] = st.radio("漲跌顏色", ["漲紅跌綠", "漲綠跌紅"], horizontal=True)
+            if chosen_market == "➕ 自訂市場...":
+                final_market = st.text_input("輸入市場名稱", value="其他市場").strip()
 
             if st.button("確認加入持股庫", use_container_width=True):
                 if new_sym:
@@ -646,17 +603,17 @@ elif st.session_state.page == "portfolio":
                     }
                     st.session_state.my_portfolio.append(new_entry)
                     save_portfolio_data(st.session_state.my_portfolio)
-                    st.success(f"已成功加入 [{final_market}] {new_sym}！")
+                    st.success(f"已加入並存檔 {new_sym}！")
                     st.rerun()
 
     with c_action2:
         with st.expander("👀 觀察自選名單 (Watchlist)", expanded=False):
             w_in, w_btn = st.columns([3, 1])
             with w_in:
-                add_w_sym = st.text_input("輸入想觀察的股票代號：", key="input_watch_sym").strip().upper()
+                add_w_sym = st.text_input("輸入觀察股票代號：", key="input_watch_sym").strip().upper()
             with w_btn:
                 st.write("")
-                if st.button("➕ 加入自選", use_container_width=True):
+                if st.button("➕ 加入", use_container_width=True):
                     if add_w_sym and add_w_sym not in st.session_state.my_watchlist:
                         st.session_state.my_watchlist.append(add_w_sym)
                         save_watchlist_data(st.session_state.my_watchlist)
@@ -681,7 +638,7 @@ elif st.session_state.page == "portfolio":
 
     st.write("")
 
-    # 持股分類清單檢視
+    # 持股列表
     all_markets = sorted(list(set([item.get("market", "未分類") for item in st.session_state.my_portfolio])))
     tabs = st.tabs(["🌐 全部持股"] + [f"📍 {m}" for m in all_markets])
 
@@ -694,14 +651,14 @@ elif st.session_state.page == "portfolio":
             ]
 
             if not filtered_items:
-                st.info("此分類目前尚無任何持股資料。")
+                st.info("此分類目前無持股資料。")
             else:
                 h1, h2, h3, h4, h5, h6 = st.columns([2, 1.2, 1.3, 1.3, 2, 2.2])
                 h1.markdown("**代號 (市場)**")
                 h2.markdown("**持有股數**")
-                h3.markdown("**買入成本**")
-                h4.markdown("**即時現價**")
-                h5.markdown("**未實現累積損益**")
+                h3.markdown("**成本**")
+                h4.markdown("**現價**")
+                h5.markdown("**未實現損益**")
                 h6.markdown("**操作**")
                 st.divider()
 
@@ -718,12 +675,12 @@ elif st.session_state.page == "portfolio":
                     profit_color = get_market_color(mkt, is_up=(diff >= 0))
                     alert_html = ""
                     if diff_pct <= p["stop_loss"]:
-                        alert_html = f"<div class='alert-tag alert-loss'>⚠️ 觸發停損 ({diff_pct:.1f}%)</div>"
+                        alert_html = f" <span class='alert-tag alert-loss'>⚠️ 停損 ({diff_pct:.1f}%)</span>"
                     elif diff_pct >= p["take_profit"]:
-                        alert_html = f"<div class='alert-tag alert-profit'>🎯 達成目標 ({diff_pct:.1f}%)</div>"
+                        alert_html = f" <span class='alert-tag alert-profit'>🎯 達標 ({diff_pct:.1f}%)</span>"
 
                     r1, r2, r3, r4, r5, r6 = st.columns([2, 1.2, 1.3, 1.3, 2, 2.2])
-                    r1.markdown(f"**{sym}** ({mkt}){alert_html}", unsafe_allow_html=True)
+                    r1.markdown(f"**{sym}**{alert_html}", unsafe_allow_html=True)
                     r2.write(f"{shares:,.0f}")
                     r3.write(f"{curr_s}{cost:,.2f}")
                     r4.write(f"{curr_s}{curr_price:,.2f}")
@@ -732,7 +689,7 @@ elif st.session_state.page == "portfolio":
                     with r6:
                         b_col1, b_col2 = st.columns([2, 1])
                         with b_col1:
-                            if st.button("📊 走勢分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
+                            if st.button("📊 分析", key=f"btn_an_{i}_{orig_idx}", use_container_width=True):
                                 st.session_state.active_ticker = sym
                                 st.session_state.page = "dashboard"
                                 st.query_params["page"] = "dashboard"
@@ -753,49 +710,38 @@ elif st.session_state.page == "portfolio":
     m1.metric("持股總現值", f"{prefix}{total_market_val_calc:,.2f}")
     m2.metric("投入總成本", f"{prefix}{total_cost_val_calc:,.2f}")
     m3.metric("累積未實現損益", f"{prefix}{tot_diff:+,.2f}", f"{tot_pct:+.2f}%")
-    m4.metric("今日單日總波動", f"{prefix}{today_total_change_calc:+,.2f}")
+    m4.metric("今日單日波動", f"{prefix}{today_total_change_calc:+,.2f}")
 
+    # 無干擾 CSV 下載模式
     if portfolio_data:
-        csv_df = pd.DataFrame(portfolio_data)[[
-            "symbol", "market", "shares", "cost", "price", "diff", "diff_pct", "stop_loss", "take_profit"
-        ]]
-        csv_df.columns = ["股票代號", "市場", "持有股數", "買入成本", "即時現價", "累積損益", "報酬率(%)", "停損點(%)", "停利點(%)"]
-        csv_data = csv_df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="📥 匯出個人持股與損益報表 (CSV)",
-            data=csv_data,
-            file_name=f"portfolio_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
+        with st.expander("📥 匯出持股資料報表 (CSV)", expanded=False):
+            csv_df = pd.DataFrame(portfolio_data)[[
+                "symbol", "market", "shares", "cost", "price", "diff", "diff_pct"
+            ]]
+            csv_df.columns = ["股票代號", "市場", "持有股數", "買入成本", "即時現價", "累積損益", "報酬率(%)"]
+            csv_data = csv_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="確認下載 CSV 檔案",
+                data=csv_data,
+                file_name=f"portfolio_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
 
 
 # ==========================================
-# 頁面 3：個股行情與全方位數據（Dashboard Screen）
+# 頁面 3：iPad 專業雙欄分屏看盤（Dashboard Screen）
 # ==========================================
 elif st.session_state.page == "dashboard":
     dash_css = """
     <style>
-    #MainMenu, header, footer, div[data-testid="stDecoration"] { visibility: hidden !important; }
-    .stApp {
+    html, body, [data-testid="stAppViewContainer"], .stApp {
         background-color: #F7F4EA !important;
         color: #2F3E34 !important;
     }
-    /* 全域滑順進場過渡動畫 */
+    #MainMenu, header, footer, div[data-testid="stDecoration"] { visibility: hidden !important; }
     .block-container {
-        padding: 1.5rem 2.5rem !important;
-        max-width: 1250px !important;
-        animation: pageSlideFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        will-change: transform, opacity;
-    }
-    @keyframes pageSlideFade {
-        0% {
-            opacity: 0;
-            transform: translateY(8px);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        padding: 1rem 1.8rem !important;
+        max-width: 1400px !important;
     }
     h1, h2, h3, h4, label, p, span {
         color: #2F3E34 !important;
@@ -803,88 +749,30 @@ elif st.session_state.page == "dashboard":
     div[data-testid="stMetric"] {
         background-color: #EFEADB !important;
         border: 1px solid #D8D2C0 !important;
-        border-radius: 12px !important;
-        padding: 10px 14px !important;
+        border-radius: 8px !important;
+        padding: 6px 10px !important;
     }
     div[data-testid="stButton"] > button {
         background-color: #E6E0CE !important;
         color: #2F3E34 !important;
         border: 1.5px solid #738A7A !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         font-weight: 600 !important;
-        transition: background-color 0.2s ease, transform 0.1s ease !important;
     }
     div[data-testid="stButton"] > button:hover {
         background-color: #738A7A !important;
         color: #F7F4EA !important;
     }
-    div[data-testid="stButton"] > button:active {
-        transform: scale(0.98);
-    }
-    div[data-baseweb="input"], div[data-baseweb="select"] {
-        background-color: #FFFFFF !important;
-        border-radius: 8px !important;
-    }
-
-    .premium-loader {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 2.5rem 1rem;
-        gap: 14px;
-    }
-    .pulse-ring {
-        width: 48px;
-        height: 48px;
-        border: 3.5px solid rgba(115, 138, 122, 0.25);
-        border-top-color: #2F3E34;
-        border-radius: 50%;
-        animation: spin 0.85s linear infinite;
-    }
-    .pulse-text {
-        font-size: 0.95rem;
-        font-weight: 600;
-        letter-spacing: 1.5px;
-        color: #556B5D;
-        animation: text-pulse 1.4s ease-in-out infinite alternate;
-    }
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-    @keyframes text-pulse {
-        from { opacity: 0.45; }
-        to { opacity: 1; }
-    }
-
-    /* 輕量平滑圖表容器（移除吃效能的 blur 濾鏡） */
-    .chart-stage-container {
-        width: 100%;
-        background-color: #F7F4EA;
-        border-radius: 12px;
-        animation: subtlePop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        will-change: transform, opacity;
-    }
-    @keyframes subtlePop {
-        0% {
-            opacity: 0;
-            transform: scale(0.98);
-        }
-        100% {
-            opacity: 1;
-            transform: scale(1.0);
-        }
-    }
-    .news-card {
+    .left-panel {
         background-color: #EFEADB;
         border: 1px solid #D8D2C0;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 10px;
-        transition: transform 0.15s ease;
+        border-radius: 10px;
+        padding: 12px;
+        height: 100%;
     }
-    .news-card:hover {
-        transform: translateX(4px);
+    .chart-container {
+        border-radius: 10px;
+        overflow: hidden;
     }
     </style>
     """
@@ -892,195 +780,171 @@ elif st.session_state.page == "dashboard":
 
     render_global_ticker()
 
-    col_nav1, col_nav2, _ = st.columns([1.5, 1.5, 5])
-    with col_nav1:
+    # 頂部導航
+    c_n1, c_n2, _ = st.columns([1.5, 1.5, 6])
+    with c_n1:
         if st.button("← 回持股庫"):
             st.session_state.page = "portfolio"
             st.query_params["page"] = "portfolio"
             st.rerun()
-    with col_nav2:
+    with c_n2:
         if st.button("🏠 回封面"):
             st.session_state.page = "welcome"
             st.query_params["page"] = "welcome"
             st.rerun()
 
-    st.markdown("### 📊 股票全方位數據指標與技術分析")
+    # iPad 橫向分屏佈局：左欄 32% (清單與快速搜尋) / 右欄 68% (走勢圖與深度數據)
+    col_left, col_right = st.columns([1.1, 2.5])
 
-    col_input, col_btn = st.columns([4, 1])
-    with col_input:
-        target_symbol = st.text_input(
-            "輸入股票代號（例如 2330.TW、AAPL、7203.T）：",
-            value=st.session_state.active_ticker,
-            key="ticker_input_field"
-        )
-    with col_btn:
-        st.write("")
-        st.write("")
-        if st.button("🔍 分析", use_container_width=True, key="btn_trigger_analysis"):
-            st.session_state.active_ticker = target_symbol.strip().upper()
+    # ---------------- 左欄：快速選股導航 ----------------
+    with col_left:
+        st.markdown("#### 🔍 快捷切換股票")
+        in_sym = st.text_input("輸入股票代號：", value=st.session_state.active_ticker, key="search_left_sym")
+        if st.button("確定搜尋", use_container_width=True):
+            st.session_state.active_ticker = in_sym.strip().upper()
             st.rerun()
 
-    current_ticker = st.session_state.active_ticker
-    market_type = detect_market(current_ticker)
+        st.markdown("---")
+        st.markdown("**💼 我的持股部位**")
+        for item in st.session_state.my_portfolio:
+            s = item["symbol"]
+            is_active = (s == st.session_state.active_ticker)
+            label = f"👉 {s}" if is_active else f"• {s}"
+            if st.button(label, key=f"sel_port_{s}", use_container_width=True):
+                st.session_state.active_ticker = s
+                st.rerun()
 
-    loader_placeholder = st.empty()
-    loader_placeholder.markdown(f"""
-        <div class="premium-loader">
-            <div class="pulse-ring"></div>
-            <div class="pulse-text">即時抓取 {current_ticker} ({market_type}) 數據與繪製走勢...</div>
-        </div>
-    """, unsafe_allow_html=True)
+        st.markdown("**👀 觀察自選名單**")
+        for s in st.session_state.my_watchlist:
+            is_active = (s == st.session_state.active_ticker)
+            label = f"👉 {s}" if is_active else f"• {s}"
+            if st.button(label, key=f"sel_watch_{s}", use_container_width=True):
+                st.session_state.active_ticker = s
+                st.rerun()
 
-    try:
-        full_df, info, news_items = fetch_stock_full_data(current_ticker)
-        loader_placeholder.empty()
+    # ---------------- 右欄：專業走勢與深度指標 ----------------
+    with col_right:
+        current_ticker = st.session_state.active_ticker
+        market_type = detect_market(current_ticker)
 
-        if not full_df.empty:
-            latest_close = full_df["Close"].iloc[-1]
-            prev_close = full_df["Close"].iloc[-2] if len(full_df) > 1 else latest_close
-            diff = latest_close - prev_close
-            diff_pct = (diff / prev_close) * 100
-            is_up = (diff >= 0)
-            theme_color = get_market_color(market_type, is_up)
+        try:
+            full_df, info, news_items = fetch_stock_full_data(current_ticker)
 
-            company_name = info.get("shortName", current_ticker)
-            st.markdown(f"## {company_name} ({current_ticker}) · <span style='font-size:1.1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
+            if not full_df.empty:
+                latest_close = full_df["Close"].iloc[-1]
+                prev_close = full_df["Close"].iloc[-2] if len(full_df) > 1 else latest_close
+                diff = latest_close - prev_close
+                diff_pct = (diff / prev_close) * 100
+                is_up = (diff >= 0)
+                theme_color = get_market_color(market_type, is_up)
+                company_name = info.get("shortName", current_ticker)
 
-            r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
-            r1_c1.metric("最新收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
-            r1_c2.metric("今日最高 / 最低", f"{full_df['High'].iloc[-1]:.2f} / {full_df['Low'].iloc[-1]:.2f}")
-            r1_c3.metric("52 週最高", f"{info.get('fiftyTwoWeekHigh', full_df['High'].tail(252).max()):.2f}")
-            r1_c4.metric("52 週最低", f"{info.get('fiftyTwoWeekLow', full_df['Low'].tail(252).min()):.2f}")
+                st.markdown(f"### {company_name} ({current_ticker}) · <span style='font-size:1rem; color:#738A7A;'>{market_type}</span>", unsafe_allow_html=True)
 
-            r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
-            pe_val = info.get('trailingPE', None)
-            r2_c1.metric("本益比 (PE)", f"{pe_val:.2f}" if pe_val else "N/A")
-            eps_val = info.get('trailingEps', None)
-            r2_c2.metric("每股盈餘 (EPS)", f"{eps_val:.2f}" if eps_val else "N/A")
-            div_yield = info.get('dividendYield', None)
-            r2_c3.metric("現金殖利率", f"{div_yield * 100:.2f}%" if div_yield else "0.00%")
-            beta_val = info.get('beta', None)
-            r2_c4.metric("波動度 (Beta)", f"{beta_val:.2f}" if beta_val else "N/A")
+                # 4 核心關鍵指標列
+                r1, r2, r3, r4 = st.columns(4)
+                r1.metric("收盤價", f"{latest_close:.2f}", f"{diff:+.2f} ({diff_pct:+.2f}%)")
+                r2.metric("52 週最高/最低", f"{info.get('fiftyTwoWeekHigh', full_df['High'].tail(252).max()):.1f} / {info.get('fiftyTwoWeekLow', full_df['Low'].tail(252).min()):.1f}")
+                pe_val = info.get('trailingPE', None)
+                r3.metric("本益比 (PE)", f"{pe_val:.2f}" if pe_val else "N/A")
+                div_yield = info.get('dividendYield', None)
+                r4.metric("殖利率", f"{div_yield * 100:.2f}%" if div_yield else "0.00%")
 
-            st.markdown("---")
+                tab_chart, tab_benchmark, tab_dca, tab_news, tab_info = st.tabs([
+                    "📈 專業走勢圖", "🌐 大盤對比 (Alpha)", "📅 定期定額", "📰 即時新聞", "🏢 財務基本面"
+                ])
 
-            tab_chart, tab_benchmark, tab_dca, tab_news, tab_data, tab_info = st.tabs([
-                "📈 動態走勢與技術線", "🌐 大盤基準對比 (Alpha)", "📅 定期定額試算 (DCA)", "📰 重大即時新聞", "📋 歷史明細", "🏢 公司財務與基本面"
-            ])
+                with tab_chart:
+                    c_mode, c_type = st.columns([2, 1.5])
+                    with c_mode:
+                        preset_view = st.selectbox(
+                            "聚焦時間：",
+                            ["最近 1 個月", "最近 3 個月", "最近 6 個月", "最近 1 年", "最近 4 年", "上市以來全部"],
+                            index=1
+                        )
+                    with c_type:
+                        chart_render_type = st.radio("類型：", ["平滑折線", "蠟燭 K 線"], horizontal=True)
 
-            with tab_chart:
-                c_mode, c_type, c_tools = st.columns([2, 1.5, 2.5])
-                with c_mode:
-                    preset_view = st.selectbox(
-                        "聚焦區間：",
-                        ["最近 1 個月", "最近 3 個月", "最近 6 個月", "最近 1 年", "最近 4 年", "上市以來全部"],
-                        index=1
-                    )
-                with c_type:
-                    chart_render_type = st.radio("圖表類型", ["平滑折線", "專業蠟燭 K 線"], horizontal=True)
-                with c_tools:
-                    show_indicators = st.multiselect(
-                        "疊加技術指標",
-                        ["20 日均線 (MA20)", "60 日季線 (MA60)", "RSI 強弱指標", "顯示成交量副圖"],
-                        default=["20 日均線 (MA20)", "顯示成交量副圖"]
-                    )
-
-                plot_data = full_df.copy()
-                if "20 日均線 (MA20)" in show_indicators and len(plot_data) >= 20:
+                    plot_data = full_df.copy()
                     plot_data["MA20"] = plot_data["Close"].rolling(window=20).mean()
-                if "60 日季線 (MA60)" in show_indicators and len(plot_data) >= 60:
-                    plot_data["MA60"] = plot_data["Close"].rolling(window=60).mean()
-                if "RSI 強弱指標" in show_indicators and len(plot_data) >= 14:
-                    plot_data["RSI"] = compute_rsi(plot_data["Close"])
 
-                latest_date = plot_data.index.max()
-                delta_map = {
-                    "最近 1 個月": timedelta(days=30),
-                    "最近 3 個月": timedelta(days=90),
-                    "最近 6 個月": timedelta(days=180),
-                    "最近 1 年": timedelta(days=365),
-                    "最近 4 年": timedelta(days=365 * 4),
-                    "上市以來全部": None
-                }
-                init_delta = delta_map[preset_view]
-                init_start = (latest_date - init_delta) if init_delta else plot_data.index.min()
+                    latest_date = plot_data.index.max()
+                    delta_map = {
+                        "最近 1 個月": timedelta(days=30),
+                        "最近 3 個月": timedelta(days=90),
+                        "最近 6 個月": timedelta(days=180),
+                        "最近 1 年": timedelta(days=365),
+                        "最近 4 年": timedelta(days=365 * 4),
+                        "上市以來全部": None
+                    }
+                    init_delta = delta_map[preset_view]
+                    init_start = (latest_date - init_delta) if init_delta else plot_data.index.min()
 
-                has_rsi = "RSI 強弱指標" in show_indicators and "RSI" in plot_data
-                has_vol = "顯示成交量副圖" in show_indicators
+                    # 採用原生自適應 Auto-Fit Y 軸（雙 Y 軸配置）
+                    fig = go.Figure()
 
-                if has_rsi and has_vol:
-                    rows, row_heights = 3, [0.60, 0.20, 0.20]
-                    vol_row, rsi_row = 2, 3
-                elif has_vol:
-                    rows, row_heights = 2, [0.75, 0.25]
-                    vol_row, rsi_row = 2, None
-                elif has_rsi:
-                    rows, row_heights = 2, [0.75, 0.25]
-                    vol_row, rsi_row = None, 2
-                else:
-                    rows, row_heights = 1, [1.0]
-                    vol_row, rsi_row = None, None
+                    if chart_render_type == "平滑折線":
+                        fig.add_trace(go.Scatter(
+                            x=plot_data.index, y=plot_data["Close"], mode='lines', name='收盤價',
+                            line=dict(color=theme_color, width=2.5),
+                            fill='tozeroy', fillcolor=f"rgba(115, 138, 122, 0.08)",
+                            yaxis='y1'
+                        ))
+                    else:
+                        up_c = "#E53935" if market_type == "台股" else "#2E7D32"
+                        dn_c = "#2E7D32" if market_type == "台股" else "#E53935"
+                        fig.add_trace(go.Candlestick(
+                            x=plot_data.index,
+                            open=plot_data['Open'], high=plot_data['High'],
+                            low=plot_data['Low'], close=plot_data['Close'],
+                            increasing_line_color=up_c, decreasing_line_color=dn_c,
+                            name='K 線', yaxis='y1'
+                        ))
 
-                fig = make_subplots(
-                    rows=rows, cols=1,
-                    shared_xaxes=True,
-                    vertical_spacing=0.06,
-                    row_heights=row_heights
-                )
+                    if "MA20" in plot_data:
+                        fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA20"], mode='lines', name='MA20', line=dict(color='#E67E22', width=1.5), yaxis='y1'))
 
-                if chart_render_type == "平滑折線":
-                    fig.add_trace(go.Scatter(
-                        x=plot_data.index, y=plot_data["Close"], mode='lines', name='收盤價',
-                        line=dict(color=theme_color, width=2.5),
-                        fill='tozeroy',
-                        fillcolor=f"rgba({int(theme_color[1:3], 16)}, {int(theme_color[3:5], 16)}, {int(theme_color[5:7], 16)}, 0.08)"
-                    ), row=1, col=1)
-                else:
-                    up_c = "#E53935" if market_type == "台股" else "#2E7D32"
-                    dn_c = "#2E7D32" if market_type == "台股" else "#E53935"
-                    fig.add_trace(go.Candlestick(
-                        x=plot_data.index,
-                        open=plot_data['Open'], high=plot_data['High'],
-                        low=plot_data['Low'], close=plot_data['Close'],
-                        increasing_line_color=up_c, decreasing_line_color=dn_c, name='K 線'
-                    ), row=1, col=1)
-
-                if "MA20" in plot_data:
-                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA20"], mode='lines', name='MA20 (月線)', line=dict(color='#E67E22', width=1.5)), row=1, col=1)
-                if "MA60" in plot_data:
-                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["MA60"], mode='lines', name='MA60 (季線)', line=dict(color='#8E44AD', width=1.5)), row=1, col=1)
-
-                if has_vol:
+                    # 成交量置於底層 (y2 獨立副軸，高度限制在 20%)
                     vol_colors = [(theme_color if r["Close"] >= r["Open"] else "#9E9E9E") for _, r in plot_data.iterrows()]
-                    fig.add_trace(go.Bar(x=plot_data.index, y=plot_data["Volume"], name="成交量", marker_color=vol_colors, opacity=0.7), row=vol_row, col=1)
+                    fig.add_trace(go.Bar(
+                        x=plot_data.index, y=plot_data["Volume"],
+                        name="成交量", marker_color=vol_colors, opacity=0.35, yaxis='y2'
+                    ))
 
-                if has_rsi:
-                    fig.add_trace(go.Scatter(x=plot_data.index, y=plot_data["RSI"], mode='lines', name='RSI(14)', line=dict(color='#2980B9', width=1.8)), row=rsi_row, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="#C0392B", row=rsi_row, col=1)
-                    fig.add_hline(y=30, line_dash="dash", line_color="#27AE60", row=rsi_row, col=1)
+                    # 關鍵 Auto-Fit 設定：X 軸平移、價格主軸 autorange 隨當前畫面自適應
+                    fig.update_layout(
+                        paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
+                        margin=dict(l=5, r=10, t=10, b=10), height=460,
+                        hovermode="x unified", dragmode="pan",
+                        xaxis=dict(
+                            showgrid=True, gridcolor="#E3DEC8", color="#2F3E34",
+                            range=[init_start, latest_date],
+                            type="date"
+                        ),
+                        yaxis=dict(
+                            title="價格",
+                            showgrid=True, gridcolor="#E3DEC8", color="#2F3E34",
+                            side="right",
+                            autorange=True,       # 隨目前時間視野自動放大/縮小價格，永不壓平
+                            fixedrange=False
+                        ),
+                        yaxis2=dict(
+                            title="",
+                            overlaying='y',
+                            side='left',
+                            showgrid=False,
+                            showticklabels=False,
+                            range=[0, plot_data["Volume"].max() * 4.5] # 限制成交量不擋住價格線
+                        )
+                    )
 
-                fig.update_layout(
-                    paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=15, b=10),
-                    height=550 if rows > 1 else 490,
-                    hovermode="x unified", dragmode="pan",
-                    xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", range=[init_start, latest_date], rangeslider=dict(visible=False), type="date"),
-                    yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", autorange=True, fixedrange=False)
-                )
+                    st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
+                    st.caption("💡 iPad 觸控手勢：單指可平移滑動時間軸，雙指張開縮放歷史時間，價格高低自動貼合滿版。")
 
-                st.markdown('<div class="chart-stage-container">', unsafe_allow_html=True)
-                st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False, 'showTips': False})
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.caption("💡 提示：在 iPad 上可用 **雙指捏合縮放** 任意平移與展開歷史走勢。")
-
-            with tab_benchmark:
-                bm_symbol, bm_name = get_market_benchmark(market_type)
-                st.markdown(f"#### 🌐 {company_name} 對比市場大盤基準（{bm_name}）")
-                bm_period = st.selectbox("對比時間長度：", ["最近 3 個月", "最近 6 個月", "最近 1 年", "最近 3 年"], index=2)
-                bm_days_map = {"最近 3 個月": 90, "最近 6 個月": 180, "最近 1 年": 365, "最近 3 年": 365*3}
-                bm_start = datetime.now() - timedelta(days=bm_days_map[bm_period])
-
-                with st.spinner(f"正在對齊並計算與 {bm_name} 的雙軸累積回報..."):
+                with tab_benchmark:
+                    bm_symbol, bm_name = get_market_benchmark(market_type)
+                    st.markdown(f"**對比大盤基準（{bm_name}）**")
+                    bm_start = datetime.now() - timedelta(days=365)
                     bm_df = fetch_benchmark_data(bm_symbol, bm_start.strftime("%Y-%m-%d"))
                     stk_bm_df = full_df[full_df.index >= pd.to_datetime(bm_start).tz_localize(full_df.index.tz)]
 
@@ -1094,112 +958,56 @@ elif st.session_state.page == "dashboard":
                             alpha = s_return.iloc[-1] - b_return.iloc[-1]
 
                             bm_fig = go.Figure()
-                            bm_fig.add_trace(go.Scatter(x=common_idx, y=s_return, mode='lines', name=f"{current_ticker} 報酬率 (%)", line=dict(color='#2E7D32' if alpha >= 0 else '#E53935', width=2.5)))
-                            bm_fig.add_trace(go.Scatter(x=common_idx, y=b_return, mode='lines', name=f"{bm_name} 報酬率 (%)", line=dict(color='#7F8C8D', width=2, dash='dot')))
+                            bm_fig.add_trace(go.Scatter(x=common_idx, y=s_return, mode='lines', name=f"{current_ticker}", line=dict(color='#2E7D32' if alpha >= 0 else '#E53935', width=2.5)))
+                            bm_fig.add_trace(go.Scatter(x=common_idx, y=b_return, mode='lines', name=f"{bm_name}", line=dict(color='#7F8C8D', width=2, dash='dot')))
                             bm_fig.update_layout(
                                 paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                                margin=dict(l=10, r=10, t=15, b=10), height=450,
+                                margin=dict(l=10, r=10, t=10, b=10), height=320,
                                 hovermode="x unified", dragmode="pan",
                                 xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
-                                yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", title="累積報酬率 (%)")
+                                yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34", autorange=True, side="right", title="累積報酬 (%)")
                             )
-                            b_c1, b_c2, b_c3 = st.columns(3)
-                            b_c1.metric(f"{current_ticker} 累積報酬", f"{s_return.iloc[-1]:+.2f}%")
-                            b_c2.metric(f"{bm_name} 累積報酬", f"{b_return.iloc[-1]:+.2f}%")
-                            b_c3.metric("超額報酬 (Alpha)", f"{alpha:+.2f}%")
-                            st.plotly_chart(bm_fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric(f"個股年報酬", f"{s_return.iloc[-1]:+.1f}%")
+                            c2.metric(f"大盤年報酬", f"{b_return.iloc[-1]:+.1f}%")
+                            c3.metric("超額 Alpha", f"{alpha:+.1f}%")
+                            st.plotly_chart(bm_fig, use_container_width=True, config={'displayModeBar': False})
 
-            with tab_dca:
-                st.markdown(f"#### 📅 定期定額 (DCA) 投資成果回測")
-                c_dca1, c_dca2 = st.columns(2)
-                with c_dca1:
-                    monthly_amount = st.number_input("每月固定投入金額 ($)：", min_value=100.0, value=5000.0, step=500.0)
-                with c_dca2:
-                    dca_years = st.selectbox("回測年期：", [1, 2, 3, 5], index=1)
+                with tab_dca:
+                    monthly_amount = st.number_input("每月定額 ($)：", value=5000.0, step=500.0)
+                    dca_start = datetime.now() - timedelta(days=2 * 365)
+                    dca_df = full_df[full_df.index >= pd.to_datetime(dca_start).tz_localize(full_df.index.tz)]
 
-                dca_start = datetime.now() - timedelta(days=dca_years * 365)
-                dca_df = full_df[full_df.index >= pd.to_datetime(dca_start).tz_localize(full_df.index.tz)]
+                    if not dca_df.empty:
+                        monthly_df = dca_df.resample('MS').first()
+                        total_invested, total_shares, dca_timeline = 0.0, 0.0, []
+                        for date, row in monthly_df.iterrows():
+                            p = row["Close"]
+                            if p > 0:
+                                total_shares += (monthly_amount / p)
+                                total_invested += monthly_amount
+                                dca_timeline.append({"date": date, "invested": total_invested, "val": total_shares * p})
 
-                if not dca_df.empty:
-                    monthly_df = dca_df.resample('MS').first()
-                    total_invested, total_shares, dca_timeline = 0.0, 0.0, []
-                    for date, row in monthly_df.iterrows():
-                        p = row["Close"]
-                        if p > 0:
-                            total_shares += (monthly_amount / p)
-                            total_invested += monthly_amount
-                            dca_timeline.append({"date": date, "invested": total_invested, "val": total_shares * p})
+                        if dca_timeline:
+                            final_val = total_shares * latest_close
+                            dca_roi = ((final_val - total_invested) / total_invested) * 100 if total_invested > 0 else 0
+                            dc1, dc2, dc3 = st.columns(3)
+                            dc1.metric("投入本金", f"${total_invested:,.0f}")
+                            dc2.metric("期末市值", f"${final_val:,.0f}")
+                            dc3.metric("定額投報", f"{final_val-total_invested:+,.0f}", f"{dca_roi:+.1f}%")
 
-                    if dca_timeline:
-                        final_val = total_shares * latest_close
-                        dca_profit = final_val - total_invested
-                        dca_roi = (dca_profit / total_invested) * 100 if total_invested > 0 else 0
+                with tab_news:
+                    if news_items:
+                        for news in news_items[:5]:
+                            st.markdown(f"• **[{news.get('title', '無標題')}]({news.get('link', '#')})**")
+                    else:
+                        st.info("暫無新聞。")
 
-                        dc1, dc2, dc3 = st.columns(3)
-                        dc1.metric("總投入本金", f"${total_invested:,.0f}")
-                        dc2.metric("累積期末市值", f"${final_val:,.0f}")
-                        dc3.metric("DCA 累積報酬", f"{dca_profit:+,.0f}", f"{dca_roi:+.2f}%")
+                with tab_info:
+                    st.write(info.get("longBusinessSummary", "暫無簡介資料。"))
 
-                        timeline_df = pd.DataFrame(dca_timeline)
-                        fig_dca = go.Figure()
-                        fig_dca.add_trace(go.Scatter(x=timeline_df["date"], y=timeline_df["val"], mode='lines', name='資產現值', line=dict(color='#2E7D32', width=2.5)))
-                        fig_dca.add_trace(go.Scatter(x=timeline_df["date"], y=timeline_df["invested"], mode='lines', name='累積本金', line=dict(color='#7F8C8D', width=2, dash='dot')))
-                        fig_dca.update_layout(
-                            paper_bgcolor="#F7F4EA", plot_bgcolor="#F7F4EA",
-                            margin=dict(l=10, r=10, t=15, b=10), height=350, hovermode="x unified",
-                            xaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34"),
-                            yaxis=dict(showgrid=True, gridcolor="#E3DEC8", color="#2F3E34")
-                        )
-                        st.plotly_chart(fig_dca, use_container_width=True)
+            else:
+                st.error("查無此股票行情資料。")
 
-            with tab_news:
-                st.markdown(f"#### 📰 {company_name} 最近重大即時新聞")
-                if news_items:
-                    for news in news_items[:6]:
-                        title = news.get("title", "無標題")
-                        publisher = news.get("publisher", "未知媒體")
-                        link = news.get("link", "#")
-                        pub_time = news.get("providerPublishTime", None)
-                        time_str = datetime.fromtimestamp(pub_time).strftime("%Y-%m-%d %H:%M") if pub_time else ""
-
-                        st.markdown(f"""
-                        <div class="news-card">
-                            <a href="{link}" target="_blank" style="text-decoration:none; color:#2F3E34; font-weight:bold; font-size:1.05rem;">{title}</a>
-                            <div style="font-size:0.8rem; color:#738A7A; margin-top:4px;">來源：{publisher} | 發布時間：{time_str}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info("目前無即時新聞資料。")
-
-            with tab_data:
-                st.caption("最近 30 個交易日資料明細")
-                display_df = full_df[["Open", "High", "Low", "Close", "Volume"]].tail(30).sort_index(ascending=False)
-                st.dataframe(display_df, use_container_width=True)
-
-            with tab_info:
-                st.markdown("#### 🏢 公司核心財務與基本面數據")
-                f1, f2, f3 = st.columns(3)
-                with f1:
-                    st.write(f"**所屬市場：** {market_type}")
-                    st.write(f"**產業類別：** {info.get('sector', '無資料')}")
-                    st.write(f"**細分行業：** {info.get('industry', '無資料')}")
-                    st.write(f"**計價貨幣：** {info.get('currency', '無資料')}")
-                with f2:
-                    market_cap = info.get("marketCap", None)
-                    st.write(f"**總市值：** {market_cap:,}" if market_cap else "**總市值：** 無資料")
-                    st.write(f"**股價淨值比 (PB)：** {info.get('priceToBook', 'N/A')}")
-                    st.write(f"**在外流通股數：** {info.get('sharesOutstanding', 'N/A'):,}" if info.get('sharesOutstanding') else "**在外流通股數：** N/A")
-                with f3:
-                    st.write(f"**營業利益率：** {info.get('operatingMargins', 0)*100:.2f}%" if info.get('operatingMargins') else "**營業利益率：** N/A")
-                    st.write(f"**毛利率：** {info.get('grossMargins', 0)*100:.2f}%" if info.get('grossMargins') else "**毛利率：** N/A")
-                    st.write(f"**目標中位價：** {info.get('targetMedianPrice', 'N/A')}")
-                st.markdown("#### 業務概況")
-                st.write(info.get("longBusinessSummary", "暫無簡介資料。"))
-
-        else:
-            loader_placeholder.empty()
-            st.error(f"查無「{current_ticker}」的行情資料，請確認股票代號是否正確。")
-
-    except Exception as e:
-        loader_placeholder.empty()
-        st.error(f"讀取失敗：{e}")
+        except Exception as e:
+            st.error(f"讀取失敗：{e}")
