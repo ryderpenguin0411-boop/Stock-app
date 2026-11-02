@@ -21,9 +21,9 @@ DATA_FILE = "portfolio.json"
 # 2. 本地資料持久化存取函式
 def load_portfolio_data():
     default_data = [
-        {"symbol": "2330.TW", "market": "台股", "shares": 1000, "cost": 950.0, "stop_loss": -10.0, "take_profit": 20.0},
-        {"symbol": "NVDA", "market": "美股", "shares": 10, "cost": 115.0, "stop_loss": -15.0, "take_profit": 30.0},
-        {"symbol": "7203.T", "market": "日股", "shares": 100, "cost": 2800.0, "stop_loss": -10.0, "take_profit": 20.0}
+        {"symbol": "2330.TW", "market": "台股", "shares": 100, "cost": 950.0, "stop_loss": -10.0, "take_profit": 20.0},
+        {"symbol": "NVDA", "market": "美股", "shares": 25, "cost": 115.0, "stop_loss": -15.0, "take_profit": 30.0},
+        {"symbol": "7203.T", "market": "日股", "shares": 300, "cost": 2800.0, "stop_loss": -10.0, "take_profit": 20.0}
     ]
     if os.path.exists(DATA_FILE):
         try:
@@ -32,6 +32,7 @@ def load_portfolio_data():
         except Exception:
             return default_data
     return default_data
+
 
 def save_portfolio_data(data):
     try:
@@ -339,41 +340,84 @@ elif st.session_state.page == "portfolio":
     # ==========================================
     # 【新增】：資產配置視覺化圓餅圖（Donut Chart）
     # ==========================================
+    # ==========================================
+    # 【優化版】：資產配置視覺化圓餅圖（清晰深色字體 + 置中總額）
+    # ==========================================
     if portfolio_data:
-        with st.expander("📊 查看資產配置甜甜圈圖（市場與個股權重）", expanded=False):
+        with st.expander("📊 查看資產配置甜甜圈圖（市場與個股權重）", expanded=True):
             col_pie1, col_pie2 = st.columns(2)
+            
+            # 手繪米色風格專屬配色盤
+            custom_colors = ['#556B5D', '#8C9A8E', '#C3B091', '#8E735B', '#4A6572', '#D99B82']
+            total_twd_display = sum(p["mkt_sub_twd"] for p in portfolio_data)
+
             with col_pie1:
                 pie_mkt_df = pd.DataFrame(portfolio_data).groupby("market")["mkt_sub_twd"].sum().reset_index()
                 fig_pie_mkt = go.Figure(data=[go.Pie(
                     labels=pie_mkt_df["market"],
                     values=pie_mkt_df["mkt_sub_twd"],
-                    hole=.45,
-                    marker=dict(colors=['#738A7A', '#C3B091', '#8E44AD', '#3498DB'])
+                    hole=.55,
+                    textinfo="label+percent",
+                    textfont=dict(color="#FFFFFF", size=12),
+                    marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
+                
+                # 甜甜圈中央放置資產文字
+                fig_pie_mkt.add_annotation(
+                    text=f"<b>總資產</b><br><span style='font-size:11px;'>NT${total_twd_display:,.0f}</span>",
+                    x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
+                )
+
                 fig_pie_mkt.update_layout(
-                    title_text="市場資產分佈 (折合台幣)",
+                    title=dict(text="<b>🌍 市場資產分佈 (折合台幣)</b>", font=dict(color="#2F3E34", size=14)),
                     paper_bgcolor="#F7F4EA",
                     plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    height=280
+                    margin=dict(l=10, r=10, t=40, b=40),
+                    height=320,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.2,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(color="#2F3E34", size=11)
+                    )
                 )
-                st.plotly_chart(fig_pie_mkt, use_container_width=True)
+                st.plotly_chart(fig_pie_mkt, use_container_width=True, config={'displayModeBar': False})
 
             with col_pie2:
                 pie_sym_df = pd.DataFrame(portfolio_data)
                 fig_pie_sym = go.Figure(data=[go.Pie(
                     labels=pie_sym_df["symbol"],
                     values=pie_sym_df["mkt_sub_twd"],
-                    hole=.45
+                    hole=.55,
+                    textinfo="label+percent",
+                    textfont=dict(color="#FFFFFF", size=12),
+                    marker=dict(colors=custom_colors, line=dict(color='#F7F4EA', width=2))
                 )])
+                
+                fig_pie_sym.add_annotation(
+                    text=f"<b>{len(portfolio_data)} 檔</b><br><span style='font-size:11px;'>持股標的</span>",
+                    x=0.5, y=0.5, font_size=13, font_color="#2F3E34", showarrow=False
+                )
+
                 fig_pie_sym.update_layout(
-                    title_text="各持股比重",
+                    title=dict(text="<b>📌 各持股比重配置</b>", font=dict(color="#2F3E34", size=14)),
                     paper_bgcolor="#F7F4EA",
                     plot_bgcolor="#F7F4EA",
-                    margin=dict(l=10, r=10, t=40, b=10),
-                    height=280
+                    margin=dict(l=10, r=10, t=40, b=40),
+                    height=320,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.2,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(color="#2F3E34", size=11)
+                    )
                 )
-                st.plotly_chart(fig_pie_sym, use_container_width=True)
+                st.plotly_chart(fig_pie_sym, use_container_width=True, config={'displayModeBar': False})
+
 
     # 持股庫進階分析與加碼試算
     if st.session_state.show_portfolio_analyzer and portfolio_data:
